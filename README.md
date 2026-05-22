@@ -105,7 +105,7 @@ On startup, the server runs `watson --version` and fails fast if the CLI is miss
 - If supported, `/api/status` uses `watson status --json`.
 - If not supported, `/api/status` falls back to `watson log --current --all --json` plus `watson status --elapsed`.
 
-The fallback keeps the app compatible with stock Watson 2.1.0.
+The fallback keeps the app compatible with stock Watson 2.1.0 while upstream JSON status support is tracked in [jazzband/Watson#520](https://github.com/jazzband/Watson/pull/520).
 
 Relevant upstream contracts:
 

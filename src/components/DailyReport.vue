@@ -38,7 +38,14 @@ function isExpanded(key: string) {
 
     <div v-if="dailySummaries.length" class="day-list">
       <article v-for="day in dailySummaries" :key="day.key" class="day-row">
-        <button type="button" class="day-row-toggle" @click="toggleDay(day.key)">
+        <div
+          class="day-row-toggle"
+          role="button"
+          tabindex="0"
+          @click="toggleDay(day.key)"
+          @keydown.enter.prevent="toggleDay(day.key)"
+          @keydown.space.prevent="toggleDay(day.key)"
+        >
           <div class="day-meta">
             <strong>{{ day.label }}</strong>
             <span>{{ formatDuration(day.duration) }}</span>
@@ -55,7 +62,7 @@ function isExpanded(key: string) {
             </div>
           </div>
           <span class="day-expand-label">{{ isExpanded(day.key) ? "Hide details" : "Show details" }}</span>
-        </button>
+        </div>
         <div v-show="isExpanded(day.key)" class="day-breakdown">
           <span v-for="item in day.projects" :key="item.name">
             {{ projectLabel(item.name) }} {{ formatDuration(item.duration) }}

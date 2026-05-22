@@ -204,7 +204,7 @@ async function getStatusFromCurrentLog(): Promise<WatsonStatus> {
     };
   }
 
-  let elapsed: string | null = null;
+  let elapsed: string | null;
   try {
     elapsed = await runWatson(["status", "--elapsed"]);
   } catch {
