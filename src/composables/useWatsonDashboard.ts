@@ -330,8 +330,12 @@ export function useWatsonDashboard() {
     return `/api/frames?range=week&from=${toLocalDate(weekStart.value)}&to=${toLocalDate(weekEnd.value)}`;
   }
 
-  async function refresh() {
-    loading.value = true;
+  async function refresh(options: { showLoading?: boolean } = {}) {
+    const showLoading = options.showLoading ?? true;
+
+    if (showLoading) {
+      loading.value = true;
+    }
     error.value = "";
 
     try {
@@ -352,7 +356,9 @@ export function useWatsonDashboard() {
     } catch (nextError) {
       error.value = nextError instanceof Error ? nextError.message : "Unknown error";
     } finally {
-      loading.value = false;
+      if (showLoading) {
+        loading.value = false;
+      }
       lastRefreshedAt.value = new Date();
     }
   }
@@ -389,8 +395,11 @@ export function useWatsonDashboard() {
       return;
     }
 
+    const scrollTop = window.scrollY;
     await api(`/api/frames/${encodeURIComponent(frame.id)}`, { method: "DELETE" });
-    await refresh();
+    await refresh({ showLoading: false });
+    await nextTick();
+    window.scrollTo(0, Math.min(scrollTop, document.documentElement.scrollHeight - window.innerHeight));
   }
 
   onMounted(() => {

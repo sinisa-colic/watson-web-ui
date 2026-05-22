@@ -29,9 +29,13 @@ function setRange(value: string) {
 
 <template>
   <article class="card range-card">
-    <span class="label">Selected range</span>
-    <strong>{{ formatDuration(totalMs) }}</strong>
-    <p>{{ selectedRangeLabel }}</p>
+    <div class="range-card-header">
+      <div>
+        <span class="label">Selected range</span>
+        <p>{{ selectedRangeLabel }}</p>
+      </div>
+      <strong>{{ formatDuration(totalMs) }}</strong>
+    </div>
 
     <div class="range-quick" role="group" aria-label="Quick range">
       <button

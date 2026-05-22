@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import type { JiraIssue, LogDay, WatsonFrame } from "../types";
 import { parseIssueKey } from "../utils/jira";
 import { formatClock, formatDuration, frameDuration } from "../utils/time";
@@ -12,16 +13,24 @@ defineProps<{
 defineEmits<{
   removeFrame: [frame: WatsonFrame];
 }>();
+
+const collapsed = ref(true);
 </script>
 
 <template>
   <article class="card">
-    <div class="section-title compact-title">
-      <h2>Log</h2>
-      <span>{{ framesCount }} frame{{ framesCount === 1 ? "" : "s" }}</span>
-    </div>
+    <button type="button" class="section-title" :aria-expanded="!collapsed" @click="collapsed = !collapsed">
+      <span class="section-heading-group">
+        <span class="label">Frames</span>
+        <span class="section-heading">Log</span>
+      </span>
+      <span class="section-meta">
+        {{ framesCount }} frame{{ framesCount === 1 ? "" : "s" }}
+        <span class="section-chevron" aria-hidden="true">{{ collapsed ? "Show" : "Hide" }}</span>
+      </span>
+    </button>
 
-    <div v-if="logDays.length" class="log-days">
+    <div v-if="logDays.length" v-show="!collapsed" class="log-days">
       <section v-for="day in logDays" :key="day.key" class="log-day">
         <header class="log-day-header">
           <strong>{{ day.label }}</strong>
@@ -49,6 +58,6 @@ defineEmits<{
         </article>
       </section>
     </div>
-    <p v-else>No log entries in this range.</p>
+    <p v-else v-show="!collapsed">No log entries in this range.</p>
   </article>
 </template>

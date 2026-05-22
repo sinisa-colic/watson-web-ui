@@ -2,7 +2,6 @@
 import { computed, nextTick, ref } from "vue";
 import type { WatsonStatus } from "../types";
 import { CUSTOM_PROJECT_OPTION } from "../composables/useWatsonDashboard";
-import { parseIssueKey } from "../utils/jira";
 
 export type ProjectPickerOption = {
   key: string;
@@ -42,10 +41,6 @@ const emit = defineEmits<{
 const customProjectInput = ref<HTMLInputElement | null>(null);
 const customTagsInput = ref<HTMLInputElement | null>(null);
 const tagPickerOpen = ref(false);
-
-const selectedOption = computed(() =>
-  props.projectPickerOptions.find((option) => option.key === props.selectedProject) ?? null
-);
 
 const availableTagOptions = computed(() =>
   [...new Set([...props.tagOptions, ...props.customTagOptions])].filter(
@@ -89,14 +84,10 @@ function openCustomTags() {
     <div class="controls-groups">
       <div class="control-group project-field" @focusin="$emit('projectFocus')">
         <span class="field-label">Project</span>
-        <div v-if="selectedOption && !usingCustomProject" class="project-selected">
-          <span v-if="parseIssueKey(selectedOption.key)" class="issue-key-badge">{{ selectedOption.key }}</span>
-          <span class="project-selected-title">{{ selectedOption.subtitle ?? selectedOption.label }}</span>
-        </div>
         <select :value="selectedProject" @change="onProjectSelect">
           <option :value="CUSTOM_PROJECT_OPTION">Custom project...</option>
           <option v-for="option in projectPickerOptions" :key="option.key" :value="option.key">
-            {{ option.subtitle ? option.key : option.label }}
+            {{ option.subtitle ? `${option.key} - ${option.subtitle}` : option.label }}
           </option>
         </select>
         <div v-if="usingCustomProject" class="custom-project-input">

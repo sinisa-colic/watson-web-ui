@@ -13,36 +13,36 @@ defineProps<{
 
 <template>
   <article class="card card-featured current-card">
-    <span class="label">Current</span>
-
     <div v-if="status?.running" class="current-card-body">
-      <div class="current-main">
-        <div class="current-project-head">
+      <div class="current-card-top">
+        <span class="label">Current</span>
+        <div class="current-badges">
           <span v-if="parseIssueKey(currentProjectDisplay.name)" class="issue-key-badge">
             {{ parseIssueKey(currentProjectDisplay.name) }}
           </span>
-          <strong class="current-project-title">
-            {{
-              issueForProject(currentProjectDisplay.name)?.summary ??
-              currentProjectDisplay.name
-            }}
-          </strong>
+          <span
+            v-if="issueForProject(currentProjectDisplay.name)?.status"
+            class="status-pill"
+          >
+            {{ issueForProject(currentProjectDisplay.name)?.status }}
+          </span>
         </div>
+      </div>
+
+      <strong class="current-project-title">
+        {{
+          issueForProject(currentProjectDisplay.name)?.summary ??
+          currentProjectDisplay.name
+        }}
+      </strong>
+
+      <div class="current-card-bottom">
         <div v-if="currentProjectDisplay.tags.length" class="current-tags">
           <span v-for="tag in currentProjectDisplay.tags" :key="tag" class="tag-pill">+{{ tag }}</span>
         </div>
-        <span
-          v-if="issueForProject(currentProjectDisplay.name)?.status"
-          class="status-pill"
-        >
-          {{ issueForProject(currentProjectDisplay.name)?.status }}
-        </span>
-      </div>
-      <div class="current-timer">
         <div class="stopwatch" aria-label="Current project elapsed time">
           {{ currentElapsedMs ? formatStopwatch(currentElapsedMs) : status.elapsed }}
         </div>
-        <p>{{ `Started ${status.elapsed}` }}</p>
       </div>
     </div>
 

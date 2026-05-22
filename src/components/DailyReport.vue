@@ -10,6 +10,7 @@ defineProps<{
 }>();
 
 const expandedDays = ref<Set<string>>(new Set());
+const collapsed = ref(true);
 
 function toggleDay(key: string) {
   const next = new Set(expandedDays.value);
@@ -28,15 +29,18 @@ function isExpanded(key: string) {
 
 <template>
   <section class="card daily-report">
-    <div class="section-title">
-      <div>
+    <button type="button" class="section-title" :aria-expanded="!collapsed" @click="collapsed = !collapsed">
+      <span class="section-heading-group">
         <span class="label">Per day</span>
-        <h2>Daily hours</h2>
-      </div>
-      <span>{{ dailySummaries.length }} day{{ dailySummaries.length === 1 ? "" : "s" }}</span>
-    </div>
+        <span class="section-heading">Daily hours</span>
+      </span>
+      <span class="section-meta">
+        {{ dailySummaries.length }} day{{ dailySummaries.length === 1 ? "" : "s" }}
+        <span class="section-chevron" aria-hidden="true">{{ collapsed ? "Show" : "Hide" }}</span>
+      </span>
+    </button>
 
-    <div v-if="dailySummaries.length" class="day-list">
+    <div v-if="dailySummaries.length" v-show="!collapsed" class="day-list">
       <article v-for="day in dailySummaries" :key="day.key" class="day-row">
         <div
           class="day-row-toggle"
@@ -70,6 +74,6 @@ function isExpanded(key: string) {
         </div>
       </article>
     </div>
-    <p v-else>No frames in this range.</p>
+    <p v-else v-show="!collapsed">No frames in this range.</p>
   </section>
 </template>

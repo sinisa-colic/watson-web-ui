@@ -48,18 +48,7 @@ select {
 }
 
 .hero {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
   margin-bottom: 1.5rem;
-  position: relative;
-}
-
-.hero h1 {
-  font-size: clamp(2rem, 4vw, 4rem);
-  letter-spacing: -0.06em;
-  line-height: 0.95;
-  margin: 0;
 }
 
 .eyebrow,
@@ -72,6 +61,14 @@ select {
 }
 
 .eyebrow {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.brand-row {
   align-items: center;
   display: flex;
   gap: 0.5rem;
@@ -121,21 +118,29 @@ select {
 }
 
 .current-card-body {
-  align-items: center;
   display: grid;
-  gap: 1rem;
-  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
 }
 
-.current-main {
-  min-width: 0;
+.current-card-top,
+.current-card-bottom,
+.current-badges {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.current-card-top,
+.current-card-bottom {
+  justify-content: space-between;
 }
 
 .current-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
-  margin: 0.1rem 0 0.35rem;
+  margin: 0;
+  min-width: 0;
 }
 
 .tag-pill {
@@ -159,14 +164,6 @@ select {
   text-align: right;
 }
 
-.current-timer {
-  text-align: right;
-}
-
-.current-timer p {
-  margin-top: 0.35rem;
-}
-
 .card select {
   margin-top: 0.75rem;
   width: 100%;
@@ -183,24 +180,14 @@ select {
   padding: 0.6rem 0.7rem;
 }
 
-.last-refreshed {
-  color: #64708a;
-  font-size: 0.82rem;
-  font-weight: 600;
-  margin: 0.35rem 0 0;
-}
-
 .card-featured {
   border-color: #c8d6ff;
   box-shadow: 0 20px 60px rgba(49, 94, 251, 0.12);
   margin-bottom: 1rem;
 }
 
-.current-card .current-project-head {
-  align-items: flex-start;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+.current-card {
+  padding-bottom: 1rem;
 }
 
 .current-project-title {
@@ -238,7 +225,6 @@ select {
   display: inline-block;
   font-size: 0.78rem;
   font-weight: 800;
-  margin-top: 0.45rem;
   padding: 0.22rem 0.55rem;
 }
 
@@ -263,24 +249,6 @@ select {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-.project-selected {
-  align-items: flex-start;
-  background: #f7f9fe;
-  border: 1px solid #e4e8f2;
-  border-radius: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  padding: 0.65rem 0.75rem;
-}
-
-.project-selected-title {
-  color: #172033;
-  font-size: 0.92rem;
-  font-weight: 600;
-  line-height: 1.35;
 }
 
 .tag-chips {
@@ -349,6 +317,18 @@ select {
 
 .range-card {
   margin-bottom: 1rem;
+}
+
+.range-card-header {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.range-card-header strong {
+  margin: 0;
+  text-align: right;
 }
 
 .day-row-toggle {
@@ -505,26 +485,45 @@ select {
 
 .section-title {
   align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
   display: flex;
   justify-content: space-between;
   margin-bottom: 1rem;
+  padding: 0;
+  text-align: left;
+  width: 100%;
 }
 
-.section-title h2 {
-  margin: 0.2rem 0 0;
+.section-heading-group {
+  display: grid;
+  gap: 0.15rem;
 }
 
-.section-title > span {
+.section-heading {
+  color: #172033;
+  font-size: 1.45rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.section-meta {
   color: #64708a;
+  display: grid;
+  font-size: 0.9rem;
   font-weight: 700;
+  gap: 0.15rem;
+  justify-items: end;
+  text-align: right;
 }
 
-.compact-title {
-  margin-bottom: 0.5rem;
-}
-
-.compact-title h2 {
-  margin: 0;
+.section-chevron {
+  color: #315efb;
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .day-list {
@@ -614,8 +613,9 @@ select {
 
 .project-name small {
   color: #64708a;
-  font-size: 0.82rem;
-  font-weight: 500;
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.25;
 }
 
 .ghost {
@@ -752,24 +752,23 @@ select {
   }
 
   .shell {
-    padding: 0.75rem;
+    padding: 0.5rem;
   }
 
   .hero {
-    align-items: flex-start;
     margin-bottom: 1rem;
-    min-height: 4rem;
-    padding-right: 6.5rem;
   }
 
   .header-refresh {
-    position: absolute;
-    right: 0;
-    top: 0;
+    display: grid;
+    gap: 0.1rem;
+    padding: 0.55rem 0.8rem;
   }
 
-  .hero h1 {
-    font-size: 2rem;
+  .header-refresh small {
+    color: #64708a;
+    font-size: 0.68rem;
+    font-weight: 700;
   }
 
   .eyebrow,
@@ -797,25 +796,29 @@ select {
   }
 
   .current-card-body {
-    align-items: start;
-    grid-template-columns: 1fr;
+    gap: 0.5rem;
   }
 
-  .current-timer,
-  .stopwatch {
-    text-align: left;
+  .current-card {
+    padding-bottom: 0.6rem;
+  }
+
+  .current-project-title {
+    font-size: 1.45rem;
+    line-height: 1.18;
   }
 
   .card p,
   .stopwatch,
-  .section-title > span,
+  .section-meta,
   .day-breakdown {
     font-size: 0.82rem;
   }
 
   .stopwatch {
-    font-size: 1.45rem;
-    margin: 0.3rem 0 0.4rem;
+    font-size: 1.85rem;
+    margin: 0;
+    text-align: right;
   }
 
   .card select,
@@ -883,7 +886,7 @@ select {
     margin-bottom: 0.55rem;
   }
 
-  .section-title h2 {
+  .section-heading {
     font-size: 1.1rem;
   }
 

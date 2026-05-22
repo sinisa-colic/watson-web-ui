@@ -16,21 +16,24 @@ defineEmits<{
 
 <template>
   <header class="hero">
-    <div>
+    <div class="hero-main">
       <p class="eyebrow">
-        <span>Watson Web UI</span>
-        <button
-          type="button"
-          class="version-badge"
-          title="Check for updates and reload"
-          @click="$emit('forcePwaUpdate')"
-        >
-          v{{ appVersion }}
+        <span class="brand-row">
+          <span>Watson Web UI</span>
+          <button
+            type="button"
+            class="version-badge"
+            title="Check for updates and reload"
+            @click="$emit('forcePwaUpdate')"
+          >
+            v{{ appVersion }}
+          </button>
+        </span>
+        <button type="button" class="ghost header-refresh" :disabled="loading" @click="$emit('refresh')">
+          <span>Refresh</span>
+          <small v-if="lastRefreshedAt">Updated {{ formatLastRefreshed(lastRefreshedAt) }}</small>
         </button>
       </p>
-      <h1>Time report and controls</h1>
-      <p v-if="lastRefreshedAt" class="last-refreshed">Updated {{ formatLastRefreshed(lastRefreshedAt) }}</p>
     </div>
-    <button type="button" class="ghost header-refresh" :disabled="loading" @click="$emit('refresh')">Refresh</button>
   </header>
 </template>

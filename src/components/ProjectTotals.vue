@@ -1,24 +1,40 @@
 <script setup lang="ts">
+import { computed, ref } from "vue";
 import type { JiraIssue, ProjectTotal } from "../types";
 import { parseIssueKey } from "../utils/jira";
 import { formatDuration } from "../utils/time";
 
-defineProps<{
+const props = defineProps<{
   totalsByProject: ProjectTotal[];
   issueForProject: (name: string) => JiraIssue | null;
 }>();
+
+const collapsed = ref(true);
+const totalMs = computed(() => props.totalsByProject.reduce((sum, item) => sum + item.duration, 0));
 </script>
 
 <template>
   <article class="card">
-    <h2>By Project</h2>
-    <div v-for="item in totalsByProject" :key="item.name" class="project-row">
-      <span class="project-name">
-        <span v-if="parseIssueKey(item.name)" class="issue-key-badge">{{ parseIssueKey(item.name) }}</span>
-        <strong>{{ issueForProject(item.name)?.summary ?? item.name }}</strong>
-        <small v-if="issueForProject(item.name) && !parseIssueKey(item.name)">{{ issueForProject(item.name)?.summary }}</small>
+    <button type="button" class="section-title" :aria-expanded="!collapsed" @click="collapsed = !collapsed">
+      <span class="section-heading-group">
+        <span class="label">Projects</span>
+        <span class="section-heading">By project</span>
       </span>
-      <strong>{{ formatDuration(item.duration) }}</strong>
+      <span class="section-meta">
+        {{ formatDuration(totalMs) }}
+        <span class="section-chevron" aria-hidden="true">{{ collapsed ? "Show" : "Hide" }}</span>
+      </span>
+    </button>
+
+    <div v-show="!collapsed">
+      <div v-for="item in totalsByProject" :key="item.name" class="project-row">
+        <span class="project-name">
+          <span v-if="parseIssueKey(item.name)" class="issue-key-badge">{{ parseIssueKey(item.name) }}</span>
+          <strong v-if="!issueForProject(item.name)">{{ item.name }}</strong>
+          <small v-else>{{ issueForProject(item.name)?.summary }}</small>
+        </span>
+        <strong>{{ formatDuration(item.duration) }}</strong>
+      </div>
     </div>
   </article>
 </template>
