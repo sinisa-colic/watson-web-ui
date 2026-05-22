@@ -17,6 +17,11 @@ const ISSUE_KEY_PATTERN = /^[A-Z][A-Z0-9]+-\d+$/i;
 export const CUSTOM_PROJECT_OPTION = "__custom_project__";
 export const CUSTOM_TAG_OPTION = "__custom_tags__";
 
+type WatsonActionResponse = {
+  output: string;
+  status: WatsonStatus;
+};
+
 export function useWatsonDashboard() {
   const range = ref("week");
   const weekStart = ref(startOfWeek(new Date()));
@@ -322,6 +327,22 @@ export function useWatsonDashboard() {
     issueMap.value = mapResponse;
   }
 
+  async function loadMissingIssueMap(...sources: Array<string | null | undefined>) {
+    if (!jiraConfigured.value) {
+      return;
+    }
+
+    const keys = collectIssueKeys(...sources).filter((key) => !issueMap.value[key.toUpperCase()]);
+    if (!keys.length) {
+      return;
+    }
+
+    const nextIssues = await api<Record<string, JiraIssue>>(
+      `/api/jira/issue-map?keys=${encodeURIComponent(keys.join(","))}`
+    ).catch(() => ({}));
+    issueMap.value = { ...issueMap.value, ...nextIssues };
+  }
+
   function framesPath() {
     if (range.value !== "week") {
       return `/api/frames?range=${range.value}`;
@@ -363,19 +384,37 @@ export function useWatsonDashboard() {
     }
   }
 
+  async function refreshFramesOnly(nextStatus: WatsonStatus) {
+    const nextFrames = await api<WatsonFrame[]>(framesPath());
+    frames.value = nextFrames;
+    await loadMissingIssueMap(nextStatus.project, ...nextFrames.map((frame) => frame.project));
+    lastRefreshedAt.value = new Date();
+  }
+
   async function start() {
     const path = status.value?.running && !stopOnStart.value ? "/api/switch" : "/api/start";
-    await api(path, {
+    const result = await api<WatsonActionResponse>(path, {
       method: "POST",
       body: JSON.stringify({ project: project.value, tags: parseTags() })
     });
+    status.value = result.status;
+    now.value = Date.now();
     projectTouched.value = false;
-    await refresh();
+
+    const nextProject = project.value.trim();
+    if (nextProject && !projectOptions.value.includes(nextProject)) {
+      projectOptions.value = [nextProject, ...projectOptions.value];
+    }
+
+    syncProjectSelection();
+    await refreshFramesOnly(result.status);
   }
 
   async function stop() {
-    await api("/api/stop", { method: "POST" });
-    await refresh();
+    const result = await api<WatsonActionResponse>("/api/stop", { method: "POST" });
+    status.value = result.status;
+    now.value = Date.now();
+    await refreshFramesOnly(result.status);
   }
 
   async function removeFrame(frame: WatsonFrame) {

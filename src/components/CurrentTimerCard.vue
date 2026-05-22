@@ -52,3 +52,29 @@ defineProps<{
     </div>
   </article>
 </template>
+
+<style scoped>
+.current-card {
+  min-height: 9.75rem;
+}
+
+.current-card-body,
+.current-idle {
+  min-height: 7.85rem;
+}
+
+.current-idle {
+  align-content: center;
+}
+
+@media (max-width: 860px) {
+  .current-card {
+    min-height: 9.65rem;
+  }
+
+  .current-card-body,
+  .current-idle {
+    min-height: 8.15rem;
+  }
+}
+</style>

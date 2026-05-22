@@ -38,10 +38,19 @@ const collapsed = ref(true);
         </header>
 
         <article v-for="frame in day.frames" :key="frame.id" class="log-frame">
-          <div class="log-time">
-            <strong>{{ formatClock(frame.start) }} -> {{ formatClock(frame.stop) }}</strong>
-            <span>{{ formatDuration(frameDuration(frame)) }}</span>
+          <div class="log-frame-head">
+            <div class="log-time">
+              <strong>{{ formatClock(frame.start) }} -> {{ formatClock(frame.stop) }}</strong>
+              <span>{{ formatDuration(frameDuration(frame)) }}</span>
+            </div>
+            <div class="log-frame-actions">
+              <code>{{ frame.id.slice(0, 7) }}</code>
+              <button v-if="frame.id !== 'current'" type="button" class="danger ghost" @click="$emit('removeFrame', frame)">
+                Remove
+              </button>
+            </div>
           </div>
+
           <div class="log-main">
             <div class="log-project-head">
               <span v-if="parseIssueKey(frame.project)" class="issue-key-badge">{{ parseIssueKey(frame.project) }}</span>
@@ -51,10 +60,6 @@ const collapsed = ref(true);
               <span v-for="tag in frame.tags" :key="tag" class="tag-pill">+{{ tag }}</span>
             </div>
           </div>
-          <code>{{ frame.id.slice(0, 7) }}</code>
-          <button v-if="frame.id !== 'current'" type="button" class="danger ghost" @click="$emit('removeFrame', frame)">
-            Remove
-          </button>
         </article>
       </section>
     </div>
