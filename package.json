@@ -1,6 +1,6 @@
 {
   "name": "watson-web-ui",
-  "version": "1.0.4",
+  "version": "1.0.6",
   "description": "Web dashboard for Watson reports and timer controls",
   "type": "module",
   "main": "server/index.ts",
