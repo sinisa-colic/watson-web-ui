@@ -1,9 +1,22 @@
 import type { WatsonFrame } from "../types";
+import { getWatsonDisplayPreferences } from "./displayPreferences";
 
-export function startOfWeek(value: Date) {
+const WEEK_START_TO_JS_DAY: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6
+};
+
+export function startOfWeek(value: Date, weekStart = getWatsonDisplayPreferences().weekStart) {
+  const targetDay = WEEK_START_TO_JS_DAY[weekStart] ?? 1;
   const date = new Date(value);
-  const day = date.getDay() || 7;
-  date.setDate(date.getDate() - day + 1);
+  const diff = (date.getDay() - targetDay + 7) % 7;
+
+  date.setDate(date.getDate() - diff);
   date.setHours(0, 0, 0, 0);
   return date;
 }
@@ -21,11 +34,18 @@ export function toLocalDate(value: Date) {
   return `${year}-${month}-${day}`;
 }
 
+function timeFormatOptions() {
+  const { hour12 } = getWatsonDisplayPreferences();
+
+  return {
+    hour12,
+    hour: "2-digit" as const,
+    minute: "2-digit" as const
+  };
+}
+
 export function formatLastRefreshed(value: Date) {
-  return value.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit"
-  });
+  return value.toLocaleTimeString(undefined, timeFormatOptions());
 }
 
 export function formatDuration(ms: number) {
@@ -67,14 +87,25 @@ export function formatTime(value: string) {
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
+    ...timeFormatOptions()
   }).format(new Date(value));
 }
 
 export function formatClock(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(value));
+  return new Intl.DateTimeFormat(undefined, timeFormatOptions()).format(new Date(value));
+}
+
+export function toDatetimeLocalValue(value: string) {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+export function datetimeLocalToIso(value: string) {
+  return new Date(value).toISOString();
 }

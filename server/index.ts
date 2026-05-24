@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import path from "node:path";
 import express from "express";
 import { fetchIssueMap, fetchMyIssues, jiraStatus } from "./jira.js";
+import { loadWatsonCliConfig } from "./watsonConfig.js";
 
 type WatsonFrame = {
   id: string;
@@ -51,20 +52,39 @@ function resolveWatsonCommand(): { bin: string; prefixArgs: string[]; extraEnv: 
 const watson = resolveWatsonCommand();
 let statusJsonSupported = false;
 
+app.use((request, response, next) => {
+  const origin = request.headers.origin;
+
+  if (origin) {
+    response.setHeader("Access-Control-Allow-Origin", origin);
+    response.setHeader("Vary", "Origin");
+  }
+
+  response.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (request.method === "OPTIONS") {
+    response.sendStatus(204);
+    return;
+  }
+
+  next();
+});
+
 app.use(express.json());
 
 function statusHelpSupportsJson(help: string): boolean {
   return /\s-j,\s+--json\b|\s--json\s+Format/i.test(help);
 }
 
-function runWatson(args: string[]): Promise<string> {
+function runWatson(args: string[], extraEnv: Record<string, string> = {}): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
       watson.bin,
       [...watson.prefixArgs, ...args],
       {
         timeout: 15000,
-        env: { ...process.env, ...watson.extraEnv, NO_COLOR: "1" }
+        env: { ...process.env, ...watson.extraEnv, ...extraEnv, NO_COLOR: "1" }
       },
       (error, stdout, stderr) => {
         if (error) {
@@ -140,12 +160,11 @@ async function listWatsonValues(kind: "projects" | "tags"): Promise<string[]> {
     .filter(Boolean);
 }
 
-async function getStopOnStart(): Promise<boolean> {
+async function readWatsonConfigValue(key: string): Promise<string> {
   try {
-    const output = await runWatson(["config", "options.stop_on_start"]);
-    return ["1", "on", "true", "yes"].includes(output.trim().toLowerCase());
+    return await runWatson(["config", key]);
   } catch {
-    return false;
+    return "";
   }
 }
 
@@ -187,6 +206,56 @@ async function getStatusFromJson(): Promise<WatsonStatus> {
     elapsed: data.elapsed ?? null,
     startedAt: data.start ?? null
   };
+}
+
+function toWatsonDatetime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("Invalid datetime.");
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+function normalizeTags(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .map((tag) => String(tag).replace(/^\+/, "").trim())
+    .filter(Boolean);
+}
+
+async function editFrame(
+  id: string,
+  payload: { project: string; start: string; stop: string; tags: string[] }
+): Promise<string> {
+  const editJson = JSON.stringify(
+    {
+      project: payload.project,
+      start: toWatsonDatetime(payload.start),
+      stop: toWatsonDatetime(payload.stop),
+      tags: payload.tags
+    },
+    null,
+    4
+  );
+
+  const editorScript = path.resolve(projectRoot, "server", "watson-edit-editor.sh");
+
+  return runWatson(["edit", id], {
+    EDITOR: `sh ${editorScript}`,
+    VISUAL: `sh ${editorScript}`,
+    WATSON_EDIT_JSON: editJson
+  });
 }
 
 async function getStatusFromCurrentLog(): Promise<WatsonStatus> {
@@ -248,12 +317,12 @@ app.get("/api/frames", async (request, response, next) => {
 
 app.get("/api/options", async (_request, response, next) => {
   try {
-    const [projects, tags, stopOnStart] = await Promise.all([
+    const [projects, tags, config] = await Promise.all([
       listWatsonValues("projects"),
       listWatsonValues("tags"),
-      getStopOnStart()
+      loadWatsonCliConfig(readWatsonConfigValue)
     ]);
-    response.json({ projects, tags, stopOnStart });
+    response.json({ projects, tags, ...config });
   } catch (error) {
     next(error);
   }
@@ -339,6 +408,50 @@ app.delete("/api/frames/:id", async (request, response, next) => {
   }
 });
 
+app.patch("/api/frames/:id", async (request, response, next) => {
+  try {
+    const id = request.params.id;
+
+    if (!/^[a-f0-9]{7,64}$/i.test(id)) {
+      response.status(400).json({ error: "Only saved Watson frame IDs can be edited." });
+      return;
+    }
+
+    const project = String(request.body.project ?? "").trim();
+    const start = String(request.body.start ?? "").trim();
+    const stop = String(request.body.stop ?? "").trim();
+    const tags = normalizeTags(request.body.tags);
+
+    if (!project || !start || !stop) {
+      response.status(400).json({ error: "Project, start, and stop are required." });
+      return;
+    }
+
+    const startDate = new Date(start);
+    const stopDate = new Date(stop);
+
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(stopDate.getTime())) {
+      response.status(400).json({ error: "Invalid start or stop datetime." });
+      return;
+    }
+
+    if (startDate >= stopDate) {
+      response.status(400).json({ error: "Start must be before stop." });
+      return;
+    }
+
+    if (startDate > new Date() || stopDate > new Date()) {
+      response.status(400).json({ error: "Start and stop cannot be in the future." });
+      return;
+    }
+
+    const output = await editFrame(id, { project, start, stop, tags });
+    response.json({ output });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/switch", async (request, response, next) => {
   try {
     const project = String(request.body.project ?? "").trim();
@@ -352,7 +465,7 @@ app.post("/api/switch", async (request, response, next) => {
     }
 
     const currentStatus = await getStatus();
-    const willAutoStop = await getStopOnStart();
+    const willAutoStop = (await loadWatsonCliConfig(readWatsonConfigValue)).stopOnStart;
     const outputs: string[] = [];
 
     if (currentStatus.running && !willAutoStop) {

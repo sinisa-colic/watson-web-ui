@@ -37,6 +37,9 @@ export type WatsonOptions = {
   projects: string[];
   tags: string[];
   stopOnStart: boolean;
+  dateFormat: string;
+  timeFormat: string;
+  weekStart: string;
 };
 
 export type JiraIssue = {

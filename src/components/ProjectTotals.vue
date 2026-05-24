@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import type { JiraIssue, ProjectTotal } from "../types";
 import { parseIssueKey } from "../utils/jira";
 import { formatDuration } from "../utils/time";
@@ -7,15 +7,19 @@ import { formatDuration } from "../utils/time";
 const props = defineProps<{
   totalsByProject: ProjectTotal[];
   issueForProject: (name: string) => JiraIssue | null;
+  collapsed: boolean;
 }>();
 
-const collapsed = ref(true);
+defineEmits<{
+  toggle: [];
+}>();
+
 const totalMs = computed(() => props.totalsByProject.reduce((sum, item) => sum + item.duration, 0));
 </script>
 
 <template>
   <article class="card">
-    <button type="button" class="section-title" :aria-expanded="!collapsed" @click="collapsed = !collapsed">
+    <button type="button" class="section-title" :aria-expanded="!collapsed" @click="$emit('toggle')">
       <span class="section-heading-group">
         <span class="label">Projects</span>
         <span class="section-heading">By project</span>

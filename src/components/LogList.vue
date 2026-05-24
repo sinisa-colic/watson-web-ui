@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref } from "vue";
 import type { JiraIssue, LogDay, WatsonFrame } from "../types";
 import { parseIssueKey } from "../utils/jira";
 import { formatClock, formatDuration, frameDuration } from "../utils/time";
@@ -8,18 +7,19 @@ defineProps<{
   framesCount: number;
   logDays: LogDay[];
   issueForProject: (name: string) => JiraIssue | null;
+  collapsed: boolean;
 }>();
 
 defineEmits<{
   removeFrame: [frame: WatsonFrame];
+  editFrame: [frame: WatsonFrame];
+  toggle: [];
 }>();
-
-const collapsed = ref(true);
 </script>
 
 <template>
   <article class="card">
-    <button type="button" class="section-title" :aria-expanded="!collapsed" @click="collapsed = !collapsed">
+    <button type="button" class="section-title" :aria-expanded="!collapsed" @click="$emit('toggle')">
       <span class="section-heading-group">
         <span class="label">Frames</span>
         <span class="section-heading">Log</span>
@@ -45,6 +45,9 @@ const collapsed = ref(true);
             </div>
             <div class="log-frame-actions">
               <code>{{ frame.id.slice(0, 7) }}</code>
+              <button v-if="frame.id !== 'current'" type="button" class="ghost" @click="$emit('editFrame', frame)">
+                Edit
+              </button>
               <button v-if="frame.id !== 'current'" type="button" class="danger ghost" @click="$emit('removeFrame', frame)">
                 Remove
               </button>

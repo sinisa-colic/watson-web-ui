@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted, ref } from "vue";
 import AppHeader from "./components/AppHeader.vue";
 import ControlsPanel from "./components/ControlsPanel.vue";
 import CurrentTimerCard from "./components/CurrentTimerCard.vue";
 import DailyReport from "./components/DailyReport.vue";
+import EditFrameModal from "./components/EditFrameModal.vue";
 import LogList from "./components/LogList.vue";
 import ProjectTotals from "./components/ProjectTotals.vue";
 import RangeCard from "./components/RangeCard.vue";
@@ -12,6 +14,43 @@ import { useWatsonDashboard } from "./composables/useWatsonDashboard";
 import { forcePwaUpdate } from "./utils/pwa";
 
 const dashboard = useWatsonDashboard();
+const projectTotalsCollapsed = ref(true);
+const logListCollapsed = ref(true);
+const reportsDesktop = ref(false);
+
+let reportsMediaQuery: MediaQueryList | null = null;
+
+function syncReportsDesktop() {
+  reportsDesktop.value = reportsMediaQuery?.matches ?? false;
+}
+
+function toggleProjectTotals() {
+  const nextCollapsed = !projectTotalsCollapsed.value;
+
+  projectTotalsCollapsed.value = nextCollapsed;
+  if (reportsDesktop.value) {
+    logListCollapsed.value = nextCollapsed;
+  }
+}
+
+function toggleLogList() {
+  const nextCollapsed = !logListCollapsed.value;
+
+  logListCollapsed.value = nextCollapsed;
+  if (reportsDesktop.value) {
+    projectTotalsCollapsed.value = nextCollapsed;
+  }
+}
+
+onMounted(() => {
+  reportsMediaQuery = window.matchMedia("(min-width: 861px)");
+  syncReportsDesktop();
+  reportsMediaQuery.addEventListener("change", syncReportsDesktop);
+});
+
+onUnmounted(() => {
+  reportsMediaQuery?.removeEventListener("change", syncReportsDesktop);
+});
 </script>
 
 <template>
@@ -84,14 +123,30 @@ const dashboard = useWatsonDashboard();
         <ProjectTotals
           :totals-by-project="dashboard.totalsByProject.value"
           :issue-for-project="dashboard.issueForProject"
+          :collapsed="projectTotalsCollapsed"
+          @toggle="toggleProjectTotals"
         />
         <LogList
           :frames-count="dashboard.frames.value.length"
           :log-days="dashboard.logDays.value"
           :issue-for-project="dashboard.issueForProject"
+          :collapsed="logListCollapsed"
+          @toggle="toggleLogList"
+          @edit-frame="dashboard.openEditFrame"
           @remove-frame="dashboard.removeFrame"
         />
       </section>
     </template>
+
+    <EditFrameModal
+      :open="dashboard.editOpen.value"
+      :draft="dashboard.editDraft.value"
+      :saving="dashboard.editSaving.value"
+      :error="dashboard.editError.value"
+      :can-save="dashboard.canSaveEdit.value"
+      @update:draft="dashboard.updateEditDraft"
+      @cancel="dashboard.closeEditFrame"
+      @save="dashboard.saveEditFrame"
+    />
   </main>
 </template>

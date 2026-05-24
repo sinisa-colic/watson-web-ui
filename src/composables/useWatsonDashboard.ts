@@ -1,6 +1,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import type { DaySummary, JiraIssue, LogDay, ProjectTotal, WatsonFrame, WatsonOptions, WatsonStatus } from "../types";
 import { api } from "../utils/api";
+import { applyWatsonDisplayPreferences } from "../utils/displayPreferences";
 import { parseIssueKey } from "../utils/jira";
 import {
   addDays,
@@ -10,12 +11,21 @@ import {
   formatTime,
   frameDuration,
   startOfWeek,
-  toLocalDate
+  toLocalDate,
+  toDatetimeLocalValue,
+  datetimeLocalToIso
 } from "../utils/time";
 
 const ISSUE_KEY_PATTERN = /^[A-Z][A-Z0-9]+-\d+$/i;
 export const CUSTOM_PROJECT_OPTION = "__custom_project__";
 export const CUSTOM_TAG_OPTION = "__custom_tags__";
+
+export type EditFrameDraft = {
+  project: string;
+  start: string;
+  stop: string;
+  tags: string;
+};
 
 type WatsonActionResponse = {
   output: string;
@@ -46,6 +56,10 @@ export function useWatsonDashboard() {
   const error = ref("");
   const lastRefreshedAt = ref<Date | null>(null);
   const now = ref(Date.now());
+  const editingFrame = ref<WatsonFrame | null>(null);
+  const editDraft = ref<EditFrameDraft>({ project: "", start: "", stop: "", tags: "" });
+  const editSaving = ref(false);
+  const editError = ref("");
 
   let stopwatchInterval: number | undefined;
 
@@ -145,6 +159,11 @@ export function useWatsonDashboard() {
     return "Start";
   });
   const canStart = computed(() => !status.value?.running || stopOnStart.value);
+  const editOpen = computed(() => editingFrame.value !== null);
+  const canSaveEdit = computed(() => {
+    const draft = editDraft.value;
+    return Boolean(draft.project.trim() && draft.start && draft.stop && !editSaving.value);
+  });
   const usingCustomProject = computed(() => selectedProject.value === CUSTOM_PROJECT_OPTION);
   const currentProjectDisplay = computed(() => ({
     name: status.value?.project ?? "",
@@ -211,6 +230,10 @@ export function useWatsonDashboard() {
       .filter(Boolean);
 
     return [...new Set([...selectedTags.value, ...parsedCustomTags])];
+  }
+
+  function parseEditTags(raw: string) {
+    return [...new Set(raw.split(/[,\s]+/).map((tag) => tag.trim().replace(/^\+/, "")).filter(Boolean))];
   }
 
   function commitCustomTags() {
@@ -371,6 +394,10 @@ export function useWatsonDashboard() {
       projectOptions.value = nextOptions.projects;
       tagOptions.value = nextOptions.tags;
       stopOnStart.value = nextOptions.stopOnStart;
+      applyWatsonDisplayPreferences({
+        timeFormat: nextOptions.timeFormat,
+        weekStart: nextOptions.weekStart
+      });
       preselectProject(nextStatus, nextFrames);
       await loadJiraData(nextStatus, nextFrames, nextOptions.projects);
       syncProjectSelection();
@@ -415,6 +442,58 @@ export function useWatsonDashboard() {
     status.value = result.status;
     now.value = Date.now();
     await refreshFramesOnly(result.status);
+  }
+
+  function openEditFrame(frame: WatsonFrame) {
+    editingFrame.value = frame;
+    editDraft.value = {
+      project: frame.project,
+      start: toDatetimeLocalValue(frame.start),
+      stop: toDatetimeLocalValue(frame.stop),
+      tags: frame.tags.join(" ")
+    };
+    editError.value = "";
+  }
+
+  function closeEditFrame() {
+    editingFrame.value = null;
+    editError.value = "";
+    editSaving.value = false;
+  }
+
+  function updateEditDraft(nextDraft: EditFrameDraft) {
+    editDraft.value = nextDraft;
+  }
+
+  async function saveEditFrame() {
+    if (!editingFrame.value || !canSaveEdit.value) {
+      return;
+    }
+
+    editSaving.value = true;
+    editError.value = "";
+
+    try {
+      const scrollTop = window.scrollY;
+      await api(`/api/frames/${encodeURIComponent(editingFrame.value.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          project: editDraft.value.project.trim(),
+          start: datetimeLocalToIso(editDraft.value.start),
+          stop: datetimeLocalToIso(editDraft.value.stop),
+          tags: parseEditTags(editDraft.value.tags)
+        })
+      });
+
+      closeEditFrame();
+      await refresh({ showLoading: false });
+      await nextTick();
+      window.scrollTo(0, Math.min(scrollTop, document.documentElement.scrollHeight - window.innerHeight));
+    } catch (nextError) {
+      editError.value = nextError instanceof Error ? nextError.message : "Could not save frame.";
+    } finally {
+      editSaving.value = false;
+    }
   }
 
   async function removeFrame(frame: WatsonFrame) {
@@ -471,6 +550,11 @@ export function useWatsonDashboard() {
     error,
     lastRefreshedAt,
     canStart,
+    editOpen,
+    editDraft,
+    editSaving,
+    editError,
+    canSaveEdit,
     stopOnStart,
     totalMs,
     totalsByProject,
@@ -495,6 +579,10 @@ export function useWatsonDashboard() {
     refresh,
     start,
     stop,
+    openEditFrame,
+    closeEditFrame,
+    updateEditDraft,
+    saveEditFrame,
     removeFrame
   };
 }
