@@ -1,6 +1,6 @@
 {
   "name": "watson-web-ui",
-  "version": "1.0.7",
+  "version": "1.0.9",
   "description": "Web dashboard for Watson reports and timer controls",
   "type": "module",
   "main": "server/index.ts",
@@ -9,6 +9,7 @@
     "dev:api": "HOST=127.0.0.1 PORT=3131 tsx watch server/index.ts",
     "dev:web": "vite",
     "build": "vite build && tsc -p tsconfig.server.json",
+    "prestart": "npm run build",
     "start": "node dist-server/index.js"
   },
   "keywords": [],

@@ -6,6 +6,11 @@
     sans-serif;
 }
 
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -16,11 +21,13 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   border: 1px solid #d6dbe8;
   border-radius: 12px;
   font: inherit;
   padding: 0.75rem 0.9rem;
+  touch-action: manipulation;
 }
 
 button {
@@ -36,9 +43,11 @@ button:disabled {
 }
 
 input,
-select {
+select,
+textarea {
   background: white;
   color: #172033;
+  font-size: 16px;
 }
 
 .shell {
@@ -665,6 +674,25 @@ select {
   padding: 1rem;
 }
 
+.offline-sync-notice {
+  align-items: center;
+  background: #fff8e6;
+  border: 1px solid #ffe0a3;
+  border-radius: 16px;
+  color: #7a4b00;
+  display: flex;
+  font-weight: 700;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin: 0 0 1rem;
+  padding: 0.8rem 1rem;
+}
+
+.offline-sync-notice button {
+  flex-shrink: 0;
+  padding: 0.45rem 0.65rem;
+}
+
 .project-row,
 .row {
   align-items: center;
@@ -829,7 +857,8 @@ select {
 
   button,
   input,
-  select {
+  select,
+  textarea {
     border-radius: 10px;
     padding: 0.55rem 0.65rem;
   }

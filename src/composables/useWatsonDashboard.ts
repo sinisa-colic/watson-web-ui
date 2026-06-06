@@ -4,6 +4,11 @@ import { api } from "../utils/api";
 import { applyWatsonDisplayPreferences } from "../utils/displayPreferences";
 import { parseIssueKey } from "../utils/jira";
 import {
+  queueOfflineAction,
+  queuedOfflineActions,
+  syncOfflineActions
+} from "../utils/offlineWatsonActions";
+import {
   addDays,
   formatDay,
   formatDuration,
@@ -17,6 +22,7 @@ import {
 } from "../utils/time";
 
 const ISSUE_KEY_PATTERN = /^[A-Z][A-Z0-9]+-\d+$/i;
+const RUNNING_STATUS_STORAGE_KEY = "watson-web-ui-running-status";
 export const CUSTOM_PROJECT_OPTION = "__custom_project__";
 export const CUSTOM_TAG_OPTION = "__custom_tags__";
 
@@ -60,8 +66,13 @@ export function useWatsonDashboard() {
   const editDraft = ref<EditFrameDraft>({ project: "", start: "", stop: "", tags: "" });
   const editSaving = ref(false);
   const editError = ref("");
+  const offlineQueueCount = ref(queuedOfflineActions().length);
+  const offlineSyncing = ref(false);
+  const offlineMessage = ref("");
 
   let stopwatchInterval: number | undefined;
+  let offlineSyncInterval: number | undefined;
+  const OFFLINE_SYNC_INTERVAL_MS = 60_000;
 
   const totalMs = computed(() =>
     frames.value.reduce((sum, frame) => sum + (new Date(frame.stop).getTime() - new Date(frame.start).getTime()), 0)
@@ -223,6 +234,74 @@ export function useWatsonDashboard() {
     return [...new Set(sources.filter((value): value is string => Boolean(value)).filter(looksLikeIssueKey))];
   }
 
+  function updateOfflineQueueCount() {
+    offlineQueueCount.value = queuedOfflineActions().length;
+  }
+
+  function shouldQueueOfflineAction(error: unknown) {
+    return !navigator.onLine || error instanceof TypeError || String(error).includes("Failed to fetch");
+  }
+
+  function cachedRunningStatus(): WatsonStatus | null {
+    try {
+      const raw = window.localStorage.getItem(RUNNING_STATUS_STORAGE_KEY);
+      const cached = raw ? (JSON.parse(raw) as WatsonStatus) : null;
+      return cached?.running && cached.project && cached.startedAt ? cached : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function rememberRunningStatus(nextStatus: WatsonStatus) {
+    if (!nextStatus.running) {
+      window.localStorage.removeItem(RUNNING_STATUS_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(RUNNING_STATUS_STORAGE_KEY, JSON.stringify(nextStatus));
+  }
+
+  function optimisticStartedStatus(projectName: string, tags: string[], at: string): WatsonStatus {
+    return {
+      running: true,
+      project: projectName,
+      tags,
+      elapsed: "offline",
+      startedAt: at
+    };
+  }
+
+  function optimisticStoppedStatus(): WatsonStatus {
+    return {
+      running: false,
+      project: null,
+      tags: [],
+      elapsed: null,
+      startedAt: null
+    };
+  }
+
+  async function syncQueuedActions() {
+    if (!offlineQueueCount.value || offlineSyncing.value) {
+      return;
+    }
+
+    offlineSyncing.value = true;
+    offlineMessage.value = "Syncing offline actions...";
+
+    try {
+      await syncOfflineActions();
+      updateOfflineQueueCount();
+      offlineMessage.value = "";
+      await refresh({ showLoading: false, skipOfflineSync: true });
+    } catch (nextError) {
+      offlineMessage.value =
+        nextError instanceof Error ? `Offline actions pending: ${nextError.message}` : "Offline actions pending.";
+    } finally {
+      offlineSyncing.value = false;
+    }
+  }
+
   function parseTags() {
     const parsedCustomTags = customTags.value
       .split(/[,\s]+/)
@@ -374,7 +453,7 @@ export function useWatsonDashboard() {
     return `/api/frames?range=week&from=${toLocalDate(weekStart.value)}&to=${toLocalDate(weekEnd.value)}`;
   }
 
-  async function refresh(options: { showLoading?: boolean } = {}) {
+  async function refresh(options: { showLoading?: boolean; skipOfflineSync?: boolean } = {}) {
     const showLoading = options.showLoading ?? true;
 
     if (showLoading) {
@@ -390,6 +469,7 @@ export function useWatsonDashboard() {
       ]);
 
       status.value = nextStatus;
+      rememberRunningStatus(nextStatus);
       frames.value = nextFrames;
       projectOptions.value = nextOptions.projects;
       tagOptions.value = nextOptions.tags;
@@ -401,7 +481,14 @@ export function useWatsonDashboard() {
       preselectProject(nextStatus, nextFrames);
       await loadJiraData(nextStatus, nextFrames, nextOptions.projects);
       syncProjectSelection();
+      updateOfflineQueueCount();
+      if (!options.skipOfflineSync) {
+        await syncQueuedActions();
+      }
     } catch (nextError) {
+      if (shouldQueueOfflineAction(nextError)) {
+        status.value ??= cachedRunningStatus();
+      }
       error.value = nextError instanceof Error ? nextError.message : "Unknown error";
     } finally {
       if (showLoading) {
@@ -420,28 +507,64 @@ export function useWatsonDashboard() {
 
   async function start() {
     const path = status.value?.running && !stopOnStart.value ? "/api/switch" : "/api/start";
-    const result = await api<WatsonActionResponse>(path, {
-      method: "POST",
-      body: JSON.stringify({ project: project.value, tags: parseTags() })
-    });
-    status.value = result.status;
+    const startedAt = new Date().toISOString();
+    const nextTags = parseTags();
+    const nextProject = project.value.trim();
+
+    try {
+      const result = await api<WatsonActionResponse>(path, {
+        method: "POST",
+        body: JSON.stringify({ project: project.value, tags: nextTags, at: startedAt })
+      });
+      status.value = result.status;
+      rememberRunningStatus(result.status);
+      await refreshFramesOnly(result.status);
+    } catch (nextError) {
+      if (!shouldQueueOfflineAction(nextError)) {
+        throw nextError;
+      }
+
+      queueOfflineAction({ type: "start", project: nextProject, tags: nextTags, at: startedAt });
+      updateOfflineQueueCount();
+      status.value = optimisticStartedStatus(nextProject, nextTags, startedAt);
+      rememberRunningStatus(status.value);
+      offlineMessage.value = "Start queued offline. It will sync when the API is reachable.";
+    }
+
     now.value = Date.now();
     projectTouched.value = false;
 
-    const nextProject = project.value.trim();
     if (nextProject && !projectOptions.value.includes(nextProject)) {
       projectOptions.value = [nextProject, ...projectOptions.value];
     }
 
     syncProjectSelection();
-    await refreshFramesOnly(result.status);
   }
 
   async function stop() {
-    const result = await api<WatsonActionResponse>("/api/stop", { method: "POST" });
-    status.value = result.status;
+    const stoppedAt = new Date().toISOString();
+
+    try {
+      const result = await api<WatsonActionResponse>("/api/stop", {
+        method: "POST",
+        body: JSON.stringify({ at: stoppedAt })
+      });
+      status.value = result.status;
+      rememberRunningStatus(result.status);
+      await refreshFramesOnly(result.status);
+    } catch (nextError) {
+      if (!shouldQueueOfflineAction(nextError)) {
+        throw nextError;
+      }
+
+      queueOfflineAction({ type: "stop", at: stoppedAt });
+      updateOfflineQueueCount();
+      status.value = optimisticStoppedStatus();
+      rememberRunningStatus(status.value);
+      offlineMessage.value = "Stop queued offline. It will sync when the API is reachable.";
+    }
+
     now.value = Date.now();
-    await refreshFramesOnly(result.status);
   }
 
   function openEditFrame(frame: WatsonFrame) {
@@ -522,15 +645,29 @@ export function useWatsonDashboard() {
 
   onMounted(() => {
     void refresh();
+    window.addEventListener("online", syncQueuedActions);
+    window.addEventListener("watson-offline-actions-changed", updateOfflineQueueCount);
     stopwatchInterval = window.setInterval(() => {
       now.value = Date.now();
     }, 1000);
+    offlineSyncInterval = window.setInterval(() => {
+      if (!offlineQueueCount.value || offlineSyncing.value || !navigator.onLine) {
+        return;
+      }
+
+      void syncQueuedActions();
+    }, OFFLINE_SYNC_INTERVAL_MS);
   });
 
   onUnmounted(() => {
     if (stopwatchInterval) {
       window.clearInterval(stopwatchInterval);
     }
+    if (offlineSyncInterval) {
+      window.clearInterval(offlineSyncInterval);
+    }
+    window.removeEventListener("online", syncQueuedActions);
+    window.removeEventListener("watson-offline-actions-changed", updateOfflineQueueCount);
   });
 
   return {
@@ -548,6 +685,9 @@ export function useWatsonDashboard() {
     project,
     loading,
     error,
+    offlineQueueCount,
+    offlineSyncing,
+    offlineMessage,
     lastRefreshedAt,
     canStart,
     editOpen,
@@ -577,6 +717,7 @@ export function useWatsonDashboard() {
     moveWeek,
     showThisWeek,
     refresh,
+    syncQueuedActions,
     start,
     stop,
     openEditFrame,

@@ -1,5 +1,8 @@
 import "dotenv/config";
 import { execFile } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import type { Server } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import path from "node:path";
 import express from "express";
 import { fetchIssueMap, fetchMyIssues, jiraStatus } from "./jira.js";
@@ -94,6 +97,55 @@ function runWatson(args: string[], extraEnv: Record<string, string> = {}): Promi
 
         resolve(stdout.trim());
       }
+    );
+  });
+}
+
+function sslWasRequested(): boolean {
+  return process.env.HTTPS === "true" || process.env.SSL_ENABLED === "true";
+}
+
+function resolveHttpsOptions(): { key: Buffer; cert: Buffer; certPath: string } | null {
+  if (!sslWasRequested()) {
+    return null;
+  }
+
+  const sslDomain = process.env.SSL_DOMAIN?.trim();
+  const sslCertPath = process.env.SSL_CERT_PATH?.trim() || (sslDomain ? `/etc/letsencrypt/live/${sslDomain}/fullchain.pem` : "");
+  const sslKeyPath = process.env.SSL_KEY_PATH?.trim() || (sslDomain ? `/etc/letsencrypt/live/${sslDomain}/privkey.pem` : "");
+
+  if (!sslCertPath || !sslKeyPath) {
+    throw new Error("SSL was requested, but SSL_CERT_PATH and SSL_KEY_PATH were not configured.");
+  }
+
+  const certExists = existsSync(sslCertPath);
+  const keyExists = existsSync(sslKeyPath);
+
+  if (!certExists || !keyExists) {
+    throw new Error(
+      `SSL was requested, but certificate files were not found. Expected cert at ${sslCertPath} and key at ${sslKeyPath}.`
+    );
+  }
+
+  return {
+    cert: readFileSync(sslCertPath),
+    certPath: sslCertPath,
+    key: readFileSync(sslKeyPath)
+  };
+}
+
+function listenApp(source: string): Server {
+  const httpsOptions = resolveHttpsOptions();
+  const protocol = httpsOptions ? "https" : "http";
+  const server = httpsOptions ? createHttpsServer(httpsOptions, app) : app;
+
+  return server.listen(port, host, () => {
+    console.log(`Watson API listening on ${protocol}://${host}:${port} [watson: ${source}]`);
+    if (httpsOptions) {
+      console.log(`SSL certificate: ${httpsOptions.certPath}`);
+    }
+    console.log(
+      statusJsonSupported ? "Watson status: using status --json" : "Watson status: using log --current --json fallback"
     );
   });
 }
@@ -222,6 +274,14 @@ function toWatsonDatetime(value: string): string {
   const seconds = String(date.getSeconds()).padStart(2, "0");
 
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+function toWatsonCliDateTime(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+
+  return toWatsonDatetime(value).replace(" ", "T");
 }
 
 function normalizeTags(raw: unknown): string[] {
@@ -370,22 +430,24 @@ app.post("/api/start", async (request, response, next) => {
     const tags = Array.isArray(request.body.tags)
       ? request.body.tags.map((tag: unknown) => `+${String(tag).replace(/^\+/, "")}`)
       : [];
+    const at = toWatsonCliDateTime(request.body.at);
 
     if (!project) {
       response.status(400).json({ error: "Project is required." });
       return;
     }
 
-    const output = await runWatson(["start", project, ...tags]);
+    const output = await runWatson(["start", ...(at ? ["--at", at] : []), project, ...tags]);
     response.json({ output, status: await getStatus() });
   } catch (error) {
     next(error);
   }
 });
 
-app.post("/api/stop", async (_request, response, next) => {
+app.post("/api/stop", async (request, response, next) => {
   try {
-    const output = await runWatson(["stop"]);
+    const at = toWatsonCliDateTime(request.body.at);
+    const output = await runWatson(["stop", ...(at ? ["--at", at] : [])]);
     response.json({ output, status: await getStatus() });
   } catch (error) {
     next(error);
@@ -492,13 +554,19 @@ assertWatsonAvailable()
   .then(() => {
     const watsonBin = process.env.WATSON_BIN?.trim();
     const source = watsonBin === "local" ? `local (${localWatsonDir})` : watson.bin;
-    app.listen(port, host, () => {
-      console.log(`Watson API listening on http://${host}:${port} [watson: ${source}]`);
-      console.log(
-        statusJsonSupported
-          ? "Watson status: using status --json"
-          : "Watson status: using log --current --json fallback"
-      );
+    const server = listenApp(source);
+
+    server.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") {
+        console.error(`Port ${port} is already in use. Stop the other process or set PORT to a free port.`);
+      } else if (error.code === "EADDRNOTAVAIL") {
+        console.error(
+          `Address ${host}:${port} is not available on this machine. Use HOST=0.0.0.0 for LAN/Tailscale access, or HOST=127.0.0.1 for local-only access.`
+        );
+      } else {
+        console.error(error.message);
+      }
+      process.exit(1);
     });
   })
   .catch((error: Error) => {

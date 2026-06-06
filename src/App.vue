@@ -63,6 +63,12 @@ onUnmounted(() => {
     />
 
     <p v-if="dashboard.error.value" class="error">{{ dashboard.error.value }}</p>
+    <p v-if="dashboard.offlineQueueCount.value" class="offline-sync-notice">
+      {{ dashboard.offlineMessage.value || `${dashboard.offlineQueueCount.value} offline action queued.` }}
+      <button type="button" class="ghost" :disabled="dashboard.offlineSyncing.value" @click="dashboard.syncQueuedActions">
+        {{ dashboard.offlineSyncing.value ? "Syncing..." : "Sync now" }}
+      </button>
+    </p>
 
     <CurrentTimerCard
       :status="dashboard.status.value"

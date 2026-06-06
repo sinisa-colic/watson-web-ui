@@ -55,6 +55,27 @@ Open:
 - Local: `http://localhost:3131`
 - Tailscale/LAN: `http://<machine-ip>:3131`
 
+For iPhone PWA/offline support, serve production over HTTPS. HTTPS is opt-in and does not change the default HTTP server unless `SSL_ENABLED=true` or `HTTPS=true` is set.
+
+When enabled, provide either explicit certificate paths or an `SSL_DOMAIN` that matches the standard Let's Encrypt layout:
+
+```text
+/etc/letsencrypt/live/<your-domain>/fullchain.pem
+/etc/letsencrypt/live/<your-domain>/privkey.pem
+```
+
+Use:
+
+```bash
+SSL_ENABLED=true SSL_DOMAIN=your-domain.example HOST=0.0.0.0 PORT=3131 npm start
+```
+
+Then open:
+
+```text
+https://your-domain.example:3131
+```
+
 ## Development
 
 For local development with Vite hot reload:
@@ -90,9 +111,9 @@ npm run build
 npm start
 ```
 
-Open `http://<host>:<port>` and use the browser's install/add-to-home-screen action.
+Open `https://<host>:<port>` and use the browser's install/add-to-home-screen action.
 
-Service workers require a secure context. `localhost` works on the same machine. For phones, use HTTPS or a browser/environment that treats your private setup as eligible. Tailscale works well for private routing, but browser install/update behavior can still vary by platform.
+Service workers require a secure context. `localhost` works on the same machine. For phones, use HTTPS. Tailscale works well for private routing, but iOS still requires the page itself to be eligible for service workers.
 
 Tap the version badge in the header to force a PWA update check. It asks the service worker to update, clears this app's cache, and reloads from the network.
 
