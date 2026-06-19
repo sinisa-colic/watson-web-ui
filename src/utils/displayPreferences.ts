@@ -15,7 +15,7 @@ export function applyWatsonDisplayPreferences(config: {
   weekStart: string;
 }) {
   preferences = {
-    hour12: /%I|%p/i.test(config.timeFormat),
+    hour12: false,
     weekStart: config.weekStart.toLowerCase() || defaults.weekStart
   };
 }

@@ -12,6 +12,8 @@ const emit = defineEmits<{
   rangeChange: [];
   moveWeek: [delta: number];
   showThisWeek: [];
+  moveMonth: [delta: number];
+  showThisMonth: [];
 }>();
 
 const quickRanges = [
@@ -54,6 +56,12 @@ function setRange(value: string) {
       <button type="button" class="ghost" @click="$emit('moveWeek', -1)">Previous week</button>
       <button type="button" class="ghost" @click="$emit('showThisWeek')">This week</button>
       <button type="button" class="ghost" @click="$emit('moveWeek', 1)">Next week</button>
+    </div>
+
+    <div v-if="range === 'month'" class="week-nav">
+      <button type="button" class="ghost" @click="$emit('moveMonth', -1)">Previous month</button>
+      <button type="button" class="ghost" @click="$emit('showThisMonth')">This month</button>
+      <button type="button" class="ghost" @click="$emit('moveMonth', 1)">Next month</button>
     </div>
   </article>
 </template>

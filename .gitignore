@@ -2,6 +2,10 @@ node_modules/
 dist/
 dist-server/
 .env
+clients.config.ts
+clients.config.js
+clients.config.mjs
+.backups/
 .DS_Store
 .idea/
 .cursor/

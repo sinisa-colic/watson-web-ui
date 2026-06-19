@@ -78,10 +78,12 @@ onUnmounted(() => {
     />
 
     <ControlsPanel
+      v-model:selected-client-key="dashboard.selectedClientKey.value"
       v-model:selected-project="dashboard.selectedProject.value"
       v-model:project="dashboard.project.value"
       v-model:selected-tags="dashboard.selectedTags.value"
       v-model:custom-tags="dashboard.customTags.value"
+      :client-options="dashboard.clientOptions.value"
       :project-picker-options="dashboard.projectPickerOptions.value"
       :using-custom-project="dashboard.usingCustomProject.value"
       :tag-options="dashboard.tagOptions.value"
@@ -92,6 +94,7 @@ onUnmounted(() => {
       :status="dashboard.status.value"
       @project-focus="dashboard.markProjectTouched"
       @project-change="dashboard.onProjectSelectionChange"
+      @client-change="dashboard.onClientSelectionChange"
       @tag-change="dashboard.onTagSelectionChange"
       @open-custom-tags="dashboard.openCustomTagsInput"
       @commit-custom-tags="dashboard.commitCustomTags"
@@ -117,6 +120,8 @@ onUnmounted(() => {
         @range-change="dashboard.refresh"
         @move-week="dashboard.moveWeek"
         @show-this-week="dashboard.showThisWeek"
+        @move-month="dashboard.moveMonth"
+        @show-this-month="dashboard.showThisMonth"
       />
 
       <DailyReport
@@ -128,6 +133,7 @@ onUnmounted(() => {
       <section class="columns">
         <ProjectTotals
           :totals-by-project="dashboard.totalsByProject.value"
+          :totals-by-client="dashboard.totalsByClient.value"
           :issue-for-project="dashboard.issueForProject"
           :collapsed="projectTotalsCollapsed"
           @toggle="toggleProjectTotals"

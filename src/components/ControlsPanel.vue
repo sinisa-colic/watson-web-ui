@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
-import type { WatsonStatus } from "../types";
-import { CUSTOM_PROJECT_OPTION } from "../composables/useWatsonDashboard";
+import type { ClientOption, WatsonStatus } from "../types";
+import { ALL_CLIENTS_KEY, CUSTOM_PROJECT_OPTION } from "../composables/useWatsonDashboard";
 
 export type ProjectPickerOption = {
   key: string;
@@ -10,6 +10,8 @@ export type ProjectPickerOption = {
 };
 
 const props = defineProps<{
+  clientOptions: ClientOption[];
+  selectedClientKey: string;
   projectPickerOptions: ProjectPickerOption[];
   selectedProject: string;
   usingCustomProject: boolean;
@@ -25,12 +27,14 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  "update:selectedClientKey": [value: string];
   "update:selectedProject": [value: string];
   "update:project": [value: string];
   "update:selectedTags": [value: string[]];
   "update:customTags": [value: string];
   projectFocus: [];
   projectChange: [];
+  clientChange: [];
   tagChange: [];
   commitCustomTags: [];
   openCustomTags: [];
@@ -77,11 +81,25 @@ function openCustomTags() {
   tagPickerOpen.value = false;
   emit("openCustomTags");
 }
+function onClientSelect(event: Event) {
+  emit("update:selectedClientKey", (event.target as HTMLSelectElement).value);
+  emit("clientChange");
+}
 </script>
 
 <template>
   <section class="card controls-card">
     <div class="controls-groups">
+      <div v-if="clientOptions.length" class="control-group client-field">
+        <span class="field-label">Client</span>
+        <select :value="selectedClientKey" @change="onClientSelect">
+          <option :value="ALL_CLIENTS_KEY">All clients</option>
+          <option v-for="client in clientOptions" :key="client.key" :value="client.key">
+            {{ client.label }}
+          </option>
+        </select>
+      </div>
+
       <div class="control-group project-field" @focusin="$emit('projectFocus')">
         <span class="field-label">Project</span>
         <select :value="selectedProject" @change="onProjectSelect">

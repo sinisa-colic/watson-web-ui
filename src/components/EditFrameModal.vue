@@ -69,10 +69,15 @@ const readonlyTags = computed(() =>
       </header>
 
       <form class="modal-form" @submit.prevent="$emit('save')">
-        <div class="field">
-          <span class="field-label">Project</span>
-          <strong class="readonly-project">{{ draft.project }}</strong>
-        </div>
+        <label class="field">
+          <span class="field-label">Task</span>
+          <input
+            :value="draft.project"
+            placeholder="Task, e.g. PI-491 or daily"
+            required
+            @input="updateField('project', ($event.target as HTMLInputElement).value)"
+          />
+        </label>
 
         <label class="field">
           <span class="field-label">Start</span>
@@ -183,15 +188,6 @@ const readonlyTags = computed(() =>
 .field {
   display: grid;
   gap: 0.35rem;
-}
-
-.readonly-project {
-  background: #f7f9ff;
-  border: 1px solid #e4e8f2;
-  border-radius: 14px;
-  color: #172033;
-  font-size: 1rem;
-  padding: 0.7rem 0.85rem;
 }
 
 .readonly-tags {

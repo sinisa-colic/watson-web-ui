@@ -1,17 +1,22 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import type { DaySummary, JiraIssue, LogDay, ProjectTotal, WatsonFrame, WatsonOptions, WatsonStatus } from "../types";
+import type { ClientOption, DaySummary, JiraIssue, LogDay, ProjectTotal, WatsonFrame, WatsonOptions, WatsonStatus } from "../types";
 import { api } from "../utils/api";
 import { applyWatsonDisplayPreferences } from "../utils/displayPreferences";
 import { parseIssueKey } from "../utils/jira";
 import {
+  isOfflineApiError,
   queueOfflineAction,
   queuedOfflineActions,
+  statusFromOfflineQueue,
   syncOfflineActions
 } from "../utils/offlineWatsonActions";
 import {
   addDays,
+  addMonths,
+  endOfMonth,
   formatDay,
   formatDuration,
+  formatMonth,
   formatShortDate,
   formatTime,
   frameDuration,
@@ -25,6 +30,7 @@ const ISSUE_KEY_PATTERN = /^[A-Z][A-Z0-9]+-\d+$/i;
 const RUNNING_STATUS_STORAGE_KEY = "watson-web-ui-running-status";
 export const CUSTOM_PROJECT_OPTION = "__custom_project__";
 export const CUSTOM_TAG_OPTION = "__custom_tags__";
+export const ALL_CLIENTS_KEY = "__all__";
 
 export type EditFrameDraft = {
   project: string;
@@ -41,13 +47,20 @@ type WatsonActionResponse = {
 export function useWatsonDashboard() {
   const range = ref("week");
   const weekStart = ref(startOfWeek(new Date()));
+  const monthStart = ref(addMonths(new Date(), 0));
   const frames = ref<WatsonFrame[]>([]);
+  const allFrames = ref<WatsonFrame[]>([]);
   const status = ref<WatsonStatus | null>(null);
   const projectOptions = ref<string[]>([]);
   const tagOptions = ref<string[]>([]);
   const jiraIssues = ref<JiraIssue[]>([]);
   const issueMap = ref<Record<string, JiraIssue>>({});
   const jiraConfigured = ref(false);
+  const configuredClients = ref<ClientOption[]>([]);
+  const defaultClientKey = ref<string | null>(null);
+  const jiraEnabledClientCount = ref(0);
+  const selectedClientKey = ref(ALL_CLIENTS_KEY);
+  const clientTouched = ref(false);
   const stopOnStart = ref(false);
   const selectedProject = ref(CUSTOM_PROJECT_OPTION);
   const projectTouched = ref(false);
@@ -83,6 +96,25 @@ export function useWatsonDashboard() {
 
     for (const frame of frames.value) {
       totals.set(frame.project, (totals.get(frame.project) ?? 0) + frameDuration(frame));
+    }
+
+    return Array.from(totals.entries())
+      .map(([name, duration]) => ({ name, duration }))
+      .sort((a, b) => b.duration - a.duration);
+  });
+
+  const totalsByClient = computed<ProjectTotal[]>(() => {
+    const clientByTag = new Map(configuredClients.value.map((client) => [client.tag, client.label]));
+    const totals = new Map<string, number>();
+
+    for (const frame of frames.value) {
+      const clientTag = frame.tags.find((tag) => clientByTag.has(tag));
+      if (!clientTag) {
+        continue;
+      }
+
+      const clientLabel = clientByTag.get(clientTag) ?? clientTag;
+      totals.set(clientLabel, (totals.get(clientLabel) ?? 0) + frameDuration(frame));
     }
 
     return Array.from(totals.entries())
@@ -142,13 +174,18 @@ export function useWatsonDashboard() {
   });
 
   const weekEnd = computed(() => addDays(weekStart.value, 6));
+  const monthEnd = computed(() => endOfMonth(monthStart.value));
 
   const selectedRangeLabel = computed(() => {
-    if (range.value !== "week") {
-      return range.value === "day" ? "Today" : range.value === "month" ? "This month" : "All time";
+    if (range.value === "week") {
+      return `${formatShortDate(weekStart.value)} - ${formatShortDate(weekEnd.value)}`;
     }
 
-    return `${formatShortDate(weekStart.value)} - ${formatShortDate(weekEnd.value)}`;
+    if (range.value === "month") {
+      return formatMonth(monthStart.value);
+    }
+
+    return range.value === "day" ? "Today" : "All time";
   });
 
   const currentElapsedMs = computed(() => {
@@ -181,21 +218,94 @@ export function useWatsonDashboard() {
     tags: status.value?.tags ?? []
   }));
 
+  const clientOptions = computed<ClientOption[]>(() => {
+    const configuredTags = new Set(configuredClients.value.map((client) => client.tag));
+    const tagOnlyClients = tagOptions.value
+      .filter((tag) => !configuredTags.has(tag))
+      .map((tag) => ({
+        key: tag,
+        label: tag,
+        tag,
+        jiraConfigured: false,
+        configured: false
+      }));
+
+    return [...configuredClients.value, ...tagOnlyClients];
+  });
+
+  const selectedClient = computed(() => {
+    if (selectedClientKey.value === ALL_CLIENTS_KEY) {
+      return null;
+    }
+
+    return clientOptions.value.find((client) => client.key === selectedClientKey.value) ?? null;
+  });
+
+  const selectedClientTag = computed(() => selectedClient.value?.tag ?? null);
+
+  const projectsByClientTag = computed(() => {
+    const index = new Map<string, Set<string>>();
+
+    for (const frame of allFrames.value) {
+      for (const tag of frame.tags) {
+        const projects = index.get(tag) ?? new Set<string>();
+        projects.add(frame.project);
+        index.set(tag, projects);
+      }
+    }
+
+    return index;
+  });
+
+  const scopedProjectNames = computed(() => {
+    if (selectedClientKey.value === ALL_CLIENTS_KEY) {
+      return null;
+    }
+
+    const tag = selectedClientTag.value;
+    if (!tag) {
+      return new Set<string>();
+    }
+
+    return projectsByClientTag.value.get(tag) ?? new Set<string>();
+  });
+
+  const showJiraIssues = computed(() => {
+    if (selectedClientKey.value === ALL_CLIENTS_KEY) {
+      return jiraEnabledClientCount.value <= 1 && jiraConfigured.value;
+    }
+
+    return Boolean(selectedClient.value?.jiraConfigured && jiraConfigured.value);
+  });
+
   const projectPickerOptions = computed(() => {
     const seen = new Set<string>();
     const options: Array<{ key: string; label: string; subtitle?: string }> = [];
 
-    for (const issue of jiraIssues.value) {
-      const key = issue.key.toUpperCase();
-      if (seen.has(key)) {
-        continue;
+    if (showJiraIssues.value) {
+      for (const issue of jiraIssues.value) {
+        const key = issue.key.toUpperCase();
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        options.push({ key: issue.key, label: issue.key, subtitle: issue.summary });
       }
-      seen.add(key);
-      options.push({ key: issue.key, label: issue.key, subtitle: issue.summary });
     }
 
-    for (const name of [status.value?.project, ...projectOptions.value]) {
+    const candidateProjects = [
+      status.value?.project,
+      ...projectOptions.value,
+      ...(scopedProjectNames.value ? Array.from(scopedProjectNames.value) : [])
+    ];
+
+    for (const name of candidateProjects) {
       if (!name) {
+        continue;
+      }
+
+      const isActiveProject = Boolean(status.value?.running && status.value.project === name);
+      if (scopedProjectNames.value && !scopedProjectNames.value.has(name) && !isActiveProject) {
         continue;
       }
 
@@ -239,7 +349,26 @@ export function useWatsonDashboard() {
   }
 
   function shouldQueueOfflineAction(error: unknown) {
-    return !navigator.onLine || error instanceof TypeError || String(error).includes("Failed to fetch");
+    return isOfflineApiError(error);
+  }
+
+  function applyOfflineQueueStatus() {
+    const offlineStatus = statusFromOfflineQueue();
+    if (!offlineStatus) {
+      return;
+    }
+
+    status.value = offlineStatus;
+    rememberRunningStatus(offlineStatus);
+  }
+
+  function resolveStatusFromRefresh(nextStatus: WatsonStatus) {
+    const pendingStatus = statusFromOfflineQueue();
+    if (pendingStatus) {
+      return pendingStatus;
+    }
+
+    return nextStatus;
   }
 
   function cachedRunningStatus(): WatsonStatus | null {
@@ -259,26 +388,6 @@ export function useWatsonDashboard() {
     }
 
     window.localStorage.setItem(RUNNING_STATUS_STORAGE_KEY, JSON.stringify(nextStatus));
-  }
-
-  function optimisticStartedStatus(projectName: string, tags: string[], at: string): WatsonStatus {
-    return {
-      running: true,
-      project: projectName,
-      tags,
-      elapsed: "offline",
-      startedAt: at
-    };
-  }
-
-  function optimisticStoppedStatus(): WatsonStatus {
-    return {
-      running: false,
-      project: null,
-      tags: [],
-      elapsed: null,
-      startedAt: null
-    };
   }
 
   async function syncQueuedActions() {
@@ -308,7 +417,10 @@ export function useWatsonDashboard() {
       .map((tag) => tag.trim().replace(/^\+/, ""))
       .filter(Boolean);
 
-    return [...new Set([...selectedTags.value, ...parsedCustomTags])];
+    const clientTag = selectedClientTag.value;
+    const manualTags = selectedTags.value.filter((tag) => tag !== clientTag);
+
+    return [...new Set([...(clientTag ? [clientTag] : []), ...manualTags, ...parsedCustomTags])];
   }
 
   function parseEditTags(raw: string) {
@@ -404,23 +516,55 @@ export function useWatsonDashboard() {
     await refresh();
   }
 
+  async function moveMonth(delta: number) {
+    monthStart.value = addMonths(monthStart.value, delta);
+    range.value = "month";
+    await refresh();
+  }
+
+  async function showThisMonth() {
+    monthStart.value = addMonths(new Date(), 0);
+    range.value = "month";
+    await refresh();
+  }
+
+  function jiraQuery(extra: Record<string, string> = {}) {
+    const params = new URLSearchParams(extra);
+    if (selectedClientKey.value !== ALL_CLIENTS_KEY) {
+      params.set("client", selectedClientKey.value);
+    }
+
+    const query = params.toString();
+    return query ? `?${query}` : "";
+  }
+
   async function loadJiraData(nextStatus: WatsonStatus, nextFrames: WatsonFrame[], nextProjects: string[]) {
+    if (selectedClientKey.value !== ALL_CLIENTS_KEY && !selectedClient.value?.jiraConfigured) {
+      jiraConfigured.value = false;
+      jiraIssues.value = [];
+      issueMap.value = {};
+      return;
+    }
+
     const keys = collectIssueKeys(
       nextStatus.project ?? undefined,
       ...nextFrames.map((frame) => frame.project),
       ...nextProjects
     );
+    const shouldFetchIssueMap =
+      keys.length > 0 &&
+      (selectedClientKey.value !== ALL_CLIENTS_KEY || jiraEnabledClientCount.value <= 1);
 
     const [statusResponse, issuesResponse, mapResponse] = await Promise.all([
-      api<{ configured: boolean }>("/api/jira/status").catch(() => ({ configured: false })),
-      api<{ configured: boolean; issues: JiraIssue[] }>("/api/jira/issues").catch(() => ({
-        configured: false,
-        issues: []
-      })),
-      keys.length
-        ? api<Record<string, JiraIssue>>(`/api/jira/issue-map?keys=${encodeURIComponent(keys.join(","))}`).catch(
-            () => ({})
-          )
+      api<{ configured: boolean }>(`/api/jira/status${jiraQuery()}`).catch(() => ({ configured: false })),
+      showJiraIssues.value
+        ? api<{ configured: boolean; issues: JiraIssue[] }>(`/api/jira/issues${jiraQuery()}`).catch(() => ({
+            configured: false,
+            issues: []
+          }))
+        : Promise.resolve({ configured: false, issues: [] }),
+      shouldFetchIssueMap
+        ? api<Record<string, JiraIssue>>(`/api/jira/issue-map${jiraQuery({ keys: keys.join(",") })}`).catch(() => ({}))
         : Promise.resolve({})
     ]);
 
@@ -430,6 +574,10 @@ export function useWatsonDashboard() {
   }
 
   async function loadMissingIssueMap(...sources: Array<string | null | undefined>) {
+    if (selectedClientKey.value === ALL_CLIENTS_KEY && jiraEnabledClientCount.value > 1) {
+      return;
+    }
+
     if (!jiraConfigured.value) {
       return;
     }
@@ -440,12 +588,54 @@ export function useWatsonDashboard() {
     }
 
     const nextIssues = await api<Record<string, JiraIssue>>(
-      `/api/jira/issue-map?keys=${encodeURIComponent(keys.join(","))}`
+      `/api/jira/issue-map${jiraQuery({ keys: keys.join(",") })}`
     ).catch(() => ({}));
     issueMap.value = { ...issueMap.value, ...nextIssues };
   }
 
+  function preselectClient(nextOptions: WatsonOptions) {
+    if (clientTouched.value) {
+      return;
+    }
+
+    configuredClients.value = nextOptions.clients ?? [];
+    defaultClientKey.value = nextOptions.defaultClientKey ?? null;
+    jiraEnabledClientCount.value = nextOptions.jiraEnabledClientCount ?? 0;
+
+    if (defaultClientKey.value && clientOptions.value.some((client) => client.key === defaultClientKey.value)) {
+      selectedClientKey.value = defaultClientKey.value;
+      return;
+    }
+
+    if (configuredClients.value.length === 1) {
+      selectedClientKey.value = configuredClients.value[0].key;
+      return;
+    }
+
+    selectedClientKey.value = ALL_CLIENTS_KEY;
+  }
+
+  async function onClientSelectionChange() {
+    clientTouched.value = true;
+    projectTouched.value = false;
+    jiraConfigured.value = false;
+    jiraIssues.value = [];
+    issueMap.value = {};
+
+    await loadJiraData(status.value ?? { running: false, project: null, tags: [], elapsed: null, startedAt: null }, frames.value, projectOptions.value);
+
+    const activeProject = status.value?.running ? status.value.project : null;
+    const nextProject = activeProject ?? projectPickerOptions.value[0]?.key ?? "";
+
+    project.value = nextProject;
+    selectedProject.value = nextProject || CUSTOM_PROJECT_OPTION;
+  }
+
   function framesPath() {
+    if (range.value === "month") {
+      return `/api/frames?range=month&from=${toLocalDate(monthStart.value)}&to=${toLocalDate(monthEnd.value)}`;
+    }
+
     if (range.value !== "week") {
       return `/api/frames?range=${range.value}`;
     }
@@ -462,18 +652,23 @@ export function useWatsonDashboard() {
     error.value = "";
 
     try {
-      const [nextStatus, nextFrames, nextOptions] = await Promise.all([
-        api<WatsonStatus>("/api/status"),
+      const hasPendingOffline = queuedOfflineActions().length > 0;
+      const statusPath = hasPendingOffline ? `/api/status?_=${Date.now()}` : "/api/status";
+      const [nextStatus, nextFrames, nextAllFrames, nextOptions] = await Promise.all([
+        api<WatsonStatus>(statusPath),
         api<WatsonFrame[]>(framesPath()),
+        api<WatsonFrame[]>("/api/frames?range=all"),
         api<WatsonOptions>("/api/options")
       ]);
 
-      status.value = nextStatus;
-      rememberRunningStatus(nextStatus);
+      status.value = resolveStatusFromRefresh(nextStatus);
+      rememberRunningStatus(status.value);
       frames.value = nextFrames;
+      allFrames.value = nextAllFrames;
       projectOptions.value = nextOptions.projects;
       tagOptions.value = nextOptions.tags;
       stopOnStart.value = nextOptions.stopOnStart;
+      preselectClient(nextOptions);
       applyWatsonDisplayPreferences({
         timeFormat: nextOptions.timeFormat,
         weekStart: nextOptions.weekStart
@@ -487,6 +682,7 @@ export function useWatsonDashboard() {
       }
     } catch (nextError) {
       if (shouldQueueOfflineAction(nextError)) {
+        applyOfflineQueueStatus();
         status.value ??= cachedRunningStatus();
       }
       error.value = nextError instanceof Error ? nextError.message : "Unknown error";
@@ -499,17 +695,23 @@ export function useWatsonDashboard() {
   }
 
   async function refreshFramesOnly(nextStatus: WatsonStatus) {
-    const nextFrames = await api<WatsonFrame[]>(framesPath());
+    const [nextFrames, nextAllFrames] = await Promise.all([
+      api<WatsonFrame[]>(framesPath()),
+      api<WatsonFrame[]>("/api/frames?range=all")
+    ]);
     frames.value = nextFrames;
+    allFrames.value = nextAllFrames;
     await loadMissingIssueMap(nextStatus.project, ...nextFrames.map((frame) => frame.project));
     lastRefreshedAt.value = new Date();
   }
 
   async function start() {
-    const path = status.value?.running && !stopOnStart.value ? "/api/switch" : "/api/start";
+    const wasRunning = Boolean(status.value?.running);
+    const path = wasRunning && !stopOnStart.value ? "/api/switch" : "/api/start";
     const startedAt = new Date().toISOString();
     const nextTags = parseTags();
     const nextProject = project.value.trim();
+    const offlineActionType = wasRunning && !stopOnStart.value ? "switch" : "start";
 
     try {
       const result = await api<WatsonActionResponse>(path, {
@@ -524,11 +726,13 @@ export function useWatsonDashboard() {
         throw nextError;
       }
 
-      queueOfflineAction({ type: "start", project: nextProject, tags: nextTags, at: startedAt });
+      queueOfflineAction({ type: offlineActionType, project: nextProject, tags: nextTags, at: startedAt });
       updateOfflineQueueCount();
-      status.value = optimisticStartedStatus(nextProject, nextTags, startedAt);
-      rememberRunningStatus(status.value);
-      offlineMessage.value = "Start queued offline. It will sync when the API is reachable.";
+      applyOfflineQueueStatus();
+      offlineMessage.value =
+        offlineActionType === "switch"
+          ? "Switch queued offline. It will sync when the API is reachable."
+          : "Start queued offline. It will sync when the API is reachable.";
     }
 
     now.value = Date.now();
@@ -559,8 +763,7 @@ export function useWatsonDashboard() {
 
       queueOfflineAction({ type: "stop", at: stoppedAt });
       updateOfflineQueueCount();
-      status.value = optimisticStoppedStatus();
-      rememberRunningStatus(status.value);
+      applyOfflineQueueStatus();
       offlineMessage.value = "Stop queued offline. It will sync when the API is reachable.";
     }
 
@@ -644,20 +847,30 @@ export function useWatsonDashboard() {
   }
 
   onMounted(() => {
+    updateOfflineQueueCount();
+    applyOfflineQueueStatus();
     void refresh();
     window.addEventListener("online", syncQueuedActions);
+    window.addEventListener("focus", syncQueuedActions);
+    window.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("watson-offline-actions-changed", updateOfflineQueueCount);
     stopwatchInterval = window.setInterval(() => {
       now.value = Date.now();
     }, 1000);
     offlineSyncInterval = window.setInterval(() => {
-      if (!offlineQueueCount.value || offlineSyncing.value || !navigator.onLine) {
+      if (!offlineQueueCount.value || offlineSyncing.value) {
         return;
       }
 
       void syncQueuedActions();
     }, OFFLINE_SYNC_INTERVAL_MS);
   });
+
+  function onVisibilityChange() {
+    if (document.visibilityState === "visible") {
+      void syncQueuedActions();
+    }
+  }
 
   onUnmounted(() => {
     if (stopwatchInterval) {
@@ -667,6 +880,8 @@ export function useWatsonDashboard() {
       window.clearInterval(offlineSyncInterval);
     }
     window.removeEventListener("online", syncQueuedActions);
+    window.removeEventListener("focus", syncQueuedActions);
+    window.removeEventListener("visibilitychange", onVisibilityChange);
     window.removeEventListener("watson-offline-actions-changed", updateOfflineQueueCount);
   });
 
@@ -675,6 +890,10 @@ export function useWatsonDashboard() {
     frames,
     status,
     tagOptions,
+    selectedClientKey,
+    clientOptions,
+    selectedClient,
+    showJiraIssues,
     selectedProject,
     customProjectInput,
     selectedTags,
@@ -698,6 +917,7 @@ export function useWatsonDashboard() {
     stopOnStart,
     totalMs,
     totalsByProject,
+    totalsByClient,
     dailySummaries,
     maxDailyMs,
     logDays,
@@ -711,11 +931,14 @@ export function useWatsonDashboard() {
     projectLabel,
     commitCustomTags,
     onProjectSelectionChange,
+    onClientSelectionChange,
     markProjectTouched,
     onTagSelectionChange,
     openCustomTagsInput,
     moveWeek,
     showThisWeek,
+    moveMonth,
+    showThisMonth,
     refresh,
     syncQueuedActions,
     start,

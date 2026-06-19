@@ -33,9 +33,20 @@ export type LogDay = {
   frames: WatsonFrame[];
 };
 
+export type ClientOption = {
+  key: string;
+  label: string;
+  tag: string;
+  jiraConfigured: boolean;
+  configured: boolean;
+};
+
 export type WatsonOptions = {
   projects: string[];
   tags: string[];
+  clients: ClientOption[];
+  defaultClientKey: string | null;
+  jiraEnabledClientCount: number;
   stopOnStart: boolean;
   dateFormat: string;
   timeFormat: string;

@@ -10,14 +10,14 @@
     "dev:web": "vite",
     "build": "vite build && tsc -p tsconfig.server.json",
     "prestart": "npm run build",
-    "start": "node dist-server/index.js"
+    "start": "tsx dist-server/index.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@vitejs/plugin-vue": "^6.0.7",
-    "concurrently": "^9.2.1",
+    "concurrently": "^10.0.3",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "tsx": "^4.22.3",

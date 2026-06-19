@@ -6,6 +6,7 @@ import { formatDuration } from "../utils/time";
 
 const props = defineProps<{
   totalsByProject: ProjectTotal[];
+  totalsByClient: ProjectTotal[];
   issueForProject: (name: string) => JiraIssue | null;
   collapsed: boolean;
 }>();
@@ -38,6 +39,16 @@ const totalMs = computed(() => props.totalsByProject.reduce((sum, item) => sum +
           <small v-else>{{ issueForProject(item.name)?.summary }}</small>
         </span>
         <strong>{{ formatDuration(item.duration) }}</strong>
+      </div>
+
+      <div v-if="totalsByClient.length" class="client-totals">
+        <span class="label">By client</span>
+        <div v-for="item in totalsByClient" :key="item.name" class="project-row">
+          <span class="project-name">
+            <strong>{{ item.name }}</strong>
+          </span>
+          <strong>{{ formatDuration(item.duration) }}</strong>
+        </div>
       </div>
     </div>
   </article>

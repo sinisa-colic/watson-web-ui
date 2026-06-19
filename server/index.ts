@@ -5,7 +5,12 @@ import type { Server } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import path from "node:path";
 import express from "express";
-import { fetchIssueMap, fetchMyIssues, jiraStatus } from "./jira.js";
+import {
+  getConfiguredClients,
+  getDefaultClientKey,
+  jiraEnabledClientCount
+} from "./clientConfig.js";
+import { fetchIssueMap, fetchMyIssues, jiraStatusForClient } from "./jira.js";
 import { loadWatsonCliConfig } from "./watsonConfig.js";
 
 type WatsonFrame = {
@@ -375,31 +380,52 @@ app.get("/api/frames", async (request, response, next) => {
   }
 });
 
+function readClientQuery(request: express.Request): string | undefined {
+  const client = typeof request.query.client === "string" ? request.query.client.trim() : "";
+  return client || undefined;
+}
+
 app.get("/api/options", async (_request, response, next) => {
   try {
-    const [projects, tags, config] = await Promise.all([
+    const [projects, tags, config, clients, defaultClientKey, jiraClients] = await Promise.all([
       listWatsonValues("projects"),
       listWatsonValues("tags"),
-      loadWatsonCliConfig(readWatsonConfigValue)
+      loadWatsonCliConfig(readWatsonConfigValue),
+      getConfiguredClients(),
+      getDefaultClientKey(),
+      jiraEnabledClientCount()
     ]);
-    response.json({ projects, tags, ...config });
+    response.json({
+      projects,
+      tags,
+      clients,
+      defaultClientKey,
+      jiraEnabledClientCount: jiraClients,
+      ...config
+    });
   } catch (error) {
     next(error);
   }
 });
 
-app.get("/api/jira/status", (_request, response) => {
-  response.json(jiraStatus());
+app.get("/api/jira/status", async (request, response, next) => {
+  try {
+    response.json(await jiraStatusForClient(readClientQuery(request)));
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.get("/api/jira/issues", async (_request, response, next) => {
+app.get("/api/jira/issues", async (request, response, next) => {
   try {
-    if (!jiraStatus().configured) {
+    const clientKey = readClientQuery(request);
+    const status = await jiraStatusForClient(clientKey);
+    if (!status.configured) {
       response.json({ configured: false, issues: [] });
       return;
     }
 
-    response.json({ configured: true, issues: await fetchMyIssues() });
+    response.json({ configured: true, issues: await fetchMyIssues(clientKey) });
   } catch (error) {
     next(error);
   }
@@ -407,7 +433,9 @@ app.get("/api/jira/issues", async (_request, response, next) => {
 
 app.get("/api/jira/issue-map", async (request, response, next) => {
   try {
-    if (!jiraStatus().configured) {
+    const clientKey = readClientQuery(request);
+    const status = await jiraStatusForClient(clientKey);
+    if (!status.configured) {
       response.json({});
       return;
     }
@@ -418,7 +446,7 @@ app.get("/api/jira/issue-map", async (request, response, next) => {
       .map((key) => key.trim())
       .filter(Boolean);
 
-    response.json(await fetchIssueMap(keys));
+    response.json(await fetchIssueMap(keys, clientKey));
   } catch (error) {
     next(error);
   }
@@ -520,6 +548,7 @@ app.post("/api/switch", async (request, response, next) => {
     const tags = Array.isArray(request.body.tags)
       ? request.body.tags.map((tag: unknown) => `+${String(tag).replace(/^\+/, "")}`)
       : [];
+    const at = toWatsonCliDateTime(request.body.at);
 
     if (!project) {
       response.status(400).json({ error: "Project is required." });
@@ -531,10 +560,10 @@ app.post("/api/switch", async (request, response, next) => {
     const outputs: string[] = [];
 
     if (currentStatus.running && !willAutoStop) {
-      outputs.push(await runWatson(["stop"]));
+      outputs.push(await runWatson(["stop", ...(at ? ["--at", at] : [])]));
     }
 
-    outputs.push(await runWatson(["start", project, ...tags]));
+    outputs.push(await runWatson(["start", ...(at ? ["--at", at] : []), project, ...tags]));
     response.json({ output: outputs.join("\n"), status: await getStatus() });
   } catch (error) {
     next(error);

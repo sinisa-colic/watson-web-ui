@@ -27,6 +27,25 @@ export function addDays(value: Date, days: number) {
   return date;
 }
 
+export function startOfMonth(value: Date) {
+  const date = new Date(value);
+  date.setDate(1);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+export function addMonths(value: Date, months: number) {
+  const date = startOfMonth(value);
+  date.setMonth(date.getMonth() + months);
+  return date;
+}
+
+export function endOfMonth(value: Date) {
+  const date = addMonths(value, 1);
+  date.setDate(date.getDate() - 1);
+  return date;
+}
+
 export function toLocalDate(value: Date) {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, "0");
@@ -34,18 +53,14 @@ export function toLocalDate(value: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function timeFormatOptions() {
-  const { hour12 } = getWatsonDisplayPreferences();
-
-  return {
-    hour12,
-    hour: "2-digit" as const,
-    minute: "2-digit" as const
-  };
+function formatClockFromDate(value: Date) {
+  const hours = String(value.getHours()).padStart(2, "0");
+  const minutes = String(value.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
 }
 
 export function formatLastRefreshed(value: Date) {
-  return value.toLocaleTimeString(undefined, timeFormatOptions());
+  return formatClockFromDate(value);
 }
 
 export function formatDuration(ms: number) {
@@ -83,16 +98,25 @@ export function formatShortDate(value: Date) {
   }).format(value);
 }
 
-export function formatTime(value: string) {
+export function formatMonth(value: Date) {
   return new Intl.DateTimeFormat(undefined, {
+    month: "long",
+    year: "numeric"
+  }).format(value);
+}
+
+export function formatTime(value: string) {
+  const date = new Date(value);
+  const datePart = new Intl.DateTimeFormat(undefined, {
     month: "short",
-    day: "numeric",
-    ...timeFormatOptions()
-  }).format(new Date(value));
+    day: "numeric"
+  }).format(date);
+
+  return `${datePart}, ${formatClockFromDate(date)}`;
 }
 
 export function formatClock(value: string) {
-  return new Intl.DateTimeFormat(undefined, timeFormatOptions()).format(new Date(value));
+  return formatClockFromDate(new Date(value));
 }
 
 export function toDatetimeLocalValue(value: string) {
