@@ -276,6 +276,13 @@ textarea {
   gap: 0.5rem;
 }
 
+.hubstaff-only-note {
+  align-self: end;
+  color: #64708a;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
 .field-label {
   color: #64708a;
   font-size: 0.72rem;

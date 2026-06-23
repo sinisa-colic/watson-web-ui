@@ -69,4 +69,42 @@ describe("buildReport", () => {
     expect(report.daily.map((day) => day.date)).toEqual(["2026-06-23", "2026-06-24"]);
     expect(report.daily[0]?.totalMs).toBe(3_600_000);
   });
+
+  it("excludes frames tagged with watsonTracking: false clients", () => {
+    const mixedClients: ClientOption[] = [
+      ...clients,
+      {
+        key: "salon",
+        label: "Salon D'Art",
+        tag: "salon-dart",
+        integrations: {},
+        configured: true,
+        watsonTracking: false
+      }
+    ];
+
+    const report = buildReport(
+      [
+        {
+          id: "1",
+          project: "PI-491",
+          start: "2026-06-23T09:00:00",
+          stop: "2026-06-23T10:00:00",
+          tags: ["client-a"]
+        },
+        {
+          id: "2",
+          project: "SDA-1",
+          start: "2026-06-23T11:00:00",
+          stop: "2026-06-23T12:00:00",
+          tags: ["salon-dart"]
+        }
+      ],
+      mixedClients
+    );
+
+    expect(report.totalMs).toBe(3_600_000);
+    expect(report.byProject).toEqual([{ name: "PI-491", duration: 3_600_000 }]);
+    expect(report.byClient).toEqual([{ name: "Client A", duration: 3_600_000 }]);
+  });
 });

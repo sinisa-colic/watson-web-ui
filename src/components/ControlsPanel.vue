@@ -23,6 +23,7 @@ const props = defineProps<{
   customTags: string;
   primaryActionLabel: string;
   canStart: boolean;
+  watsonTimerEnabled: boolean;
   status: WatsonStatus | null;
 }>();
 
@@ -127,7 +128,7 @@ function onClientSelect(event: Event) {
         </div>
       </div>
 
-      <div class="control-group tags-field">
+      <div v-if="watsonTimerEnabled" class="control-group tags-field">
         <span class="field-label">Tags</span>
         <div class="tag-chips">
           <span v-for="tag in selectedTags" :key="tag" class="tag-pill tag-pill-removable">
@@ -174,7 +175,7 @@ function onClientSelect(event: Event) {
         </div>
       </div>
 
-      <div class="control-group control-actions">
+      <div v-if="watsonTimerEnabled" class="control-group control-actions">
         <span class="field-label">Actions</span>
         <div class="action-buttons">
           <button
@@ -189,6 +190,8 @@ function onClientSelect(event: Event) {
           <button type="button" class="btn-stop" :disabled="!status?.running" @click="$emit('stop')">Stop</button>
         </div>
       </div>
+
+      <p v-else class="hubstaff-only-note">Time for this client is tracked in Hubstaff only.</p>
     </div>
   </section>
 </template>

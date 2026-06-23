@@ -80,3 +80,15 @@ export type HubstaffReport = {
   daily: HubstaffDailyEntry[];
   projects: HubstaffProjectTotal[];
 };
+
+export type HubstaffProjectOption = {
+  projectId: number;
+  name: string;
+};
+
+export type HubstaffTaskOption = {
+  taskId: number;
+  projectId: number;
+  summary: string;
+  projectName: string;
+};

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { JiraIssue, LogDay, WatsonFrame } from "../types";
-import { parseIssueKey } from "../utils/jira";
+import type { LogDay, WatsonFrame } from "../types";
+import type { PickerItem } from "#integrations/types";
 import { formatClock, formatDuration, frameDuration } from "../utils/time";
 
 defineProps<{
   framesCount: number;
   logDays: LogDay[];
-  issueForProject: (name: string) => JiraIssue | null;
+  issueForProject: (name: string) => PickerItem | null;
   collapsed: boolean;
 }>();
 
@@ -56,7 +56,7 @@ defineEmits<{
 
           <div class="log-main">
             <div class="log-project-head">
-              <span v-if="parseIssueKey(frame.project)" class="issue-key-badge">{{ parseIssueKey(frame.project) }}</span>
+              <span v-if="issueForProject(frame.project)" class="issue-key-badge">{{ frame.project }}</span>
               <strong>{{ issueForProject(frame.project)?.summary ?? frame.project }}</strong>
             </div>
             <div v-if="frame.tags.length" class="log-tags">

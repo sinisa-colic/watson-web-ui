@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { formatDuration } from "../utils/time";
+import type { SourceReport } from "#integrations/types";
+import { mergeTrackerTotals } from "#integrations/merged-totals";
 
-defineProps<{
-  totalMs: number;
+const props = defineProps<{
+  timeTrackerReports: SourceReport[];
   selectedRangeLabel: string;
   range: string;
 }>();
@@ -27,6 +30,8 @@ function setRange(value: string) {
   emit("update:range", value);
   emit("rangeChange");
 }
+
+const mergedTotals = computed(() => mergeTrackerTotals(props.timeTrackerReports));
 </script>
 
 <template>
@@ -36,7 +41,16 @@ function setRange(value: string) {
         <span class="label">Selected range</span>
         <p>{{ selectedRangeLabel }}</p>
       </div>
-      <strong>{{ formatDuration(totalMs) }}</strong>
+      <div class="range-totals">
+        <div class="tracker-total tracker-total-grand">
+          <span class="tracker-label">Total</span>
+          <strong>{{ formatDuration(mergedTotals.totalMs) }}</strong>
+        </div>
+        <div v-for="item in mergedTotals.byClient" :key="item.name" class="tracker-total">
+          <span class="tracker-label">{{ item.name }}</span>
+          <strong>{{ formatDuration(item.duration) }}</strong>
+        </div>
+      </div>
     </div>
 
     <div class="range-quick" role="group" aria-label="Quick range">
@@ -65,3 +79,29 @@ function setRange(value: string) {
     </div>
   </article>
 </template>
+
+<style scoped>
+.range-totals {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: end;
+}
+
+.tracker-total {
+  display: grid;
+  gap: 0.1rem;
+  justify-items: end;
+}
+
+.tracker-total-grand strong {
+  font-size: 1.05rem;
+}
+
+.tracker-label {
+  color: #64708a;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+</style>

@@ -6,8 +6,14 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "rootDir": "server",
+    "rootDir": ".",
     "outDir": "dist-server"
   },
-  "include": ["server/**/*.ts"]
+  "include": ["server/**/*.ts", "integrations/**/*.ts"],
+  "exclude": [
+    "integrations/**/client.ts",
+    "integrations/client-manifest.ts",
+    "integrations/client-selection.ts",
+    "integrations/unified-days.ts"
+  ]
 }

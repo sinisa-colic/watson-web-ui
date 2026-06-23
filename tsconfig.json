@@ -9,8 +9,23 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "#integrations/*": ["integrations/*"]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.vue"],
-  "exclude": ["server", "dist-server", "dist", "node_modules"]
+  "include": ["src/**/*.ts", "src/**/*.vue", "integrations/**/*.ts"],
+  "exclude": [
+    "server",
+    "dist-server",
+    "dist",
+    "node_modules",
+    "integrations/**/server.ts",
+    "integrations/**/service.ts",
+    "integrations/**/token-store.ts",
+    "integrations/**/legacy-config.ts",
+    "integrations/server-manifest.ts"
+  ]
 }

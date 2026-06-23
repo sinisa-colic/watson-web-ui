@@ -3,26 +3,39 @@ import { api } from "./api";
 
 const STORAGE_KEY = "watson-web-ui-offline-actions";
 
+export const WatsonActionType = {
+  Start: "start",
+  Switch: "switch",
+  Stop: "stop"
+} as const;
+
+export type WatsonActionType = (typeof WatsonActionType)[keyof typeof WatsonActionType];
+
 export type OfflineWatsonAction =
   | {
       id: string;
-      type: "start";
+      type: typeof WatsonActionType.Start;
       project: string;
       tags: string[];
       at: string;
     }
   | {
       id: string;
-      type: "switch";
+      type: typeof WatsonActionType.Switch;
       project: string;
       tags: string[];
       at: string;
     }
   | {
       id: string;
-      type: "stop";
+      type: typeof WatsonActionType.Stop;
       at: string;
     };
+
+export type OfflineWatsonActionInput =
+  | Omit<Extract<OfflineWatsonAction, { type: typeof WatsonActionType.Start }>, "id">
+  | Omit<Extract<OfflineWatsonAction, { type: typeof WatsonActionType.Switch }>, "id">
+  | Omit<Extract<OfflineWatsonAction, { type: typeof WatsonActionType.Stop }>, "id">;
 
 function readActions(): OfflineWatsonAction[] {
   try {
@@ -55,7 +68,7 @@ export function queuedOfflineActions() {
   return readActions();
 }
 
-export function queueOfflineAction(action: Omit<OfflineWatsonAction, "id">) {
+export function queueOfflineAction(action: OfflineWatsonActionInput) {
   const nextAction = {
     ...action,
     id: `${Date.now()}-${crypto.randomUUID()}`
@@ -73,7 +86,7 @@ export function statusFromOfflineQueue(actions: OfflineWatsonAction[] = readActi
   let status: WatsonStatus | null = null;
 
   for (const action of actions) {
-    if (action.type === "stop") {
+    if (action.type === WatsonActionType.Stop) {
       status = {
         running: false,
         project: null,
@@ -106,12 +119,12 @@ export async function syncOfflineActions() {
     .map(({ action }) => action);
 
   for (const action of actions) {
-    if (action.type === "stop") {
+    if (action.type === WatsonActionType.Stop) {
       await api("/api/stop", {
         method: "POST",
         body: JSON.stringify({ at: action.at })
       });
-    } else if (action.type === "switch") {
+    } else if (action.type === WatsonActionType.Switch) {
       await api("/api/switch", {
         method: "POST",
         body: JSON.stringify({ project: action.project, tags: action.tags, at: action.at })

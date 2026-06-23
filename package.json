@@ -1,6 +1,6 @@
 {
   "name": "watson-web-ui",
-  "version": "1.0.9",
+  "version": "2.0.0",
   "description": "Web dashboard for Watson reports and timer controls",
   "type": "module",
   "main": "server/index.ts",
@@ -8,9 +8,16 @@
     "dev": "concurrently \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "HOST=127.0.0.1 PORT=3131 tsx watch server/index.ts",
     "dev:web": "vite",
-    "build": "vite build && tsc -p tsconfig.server.json",
+    "typecheck:web": "vue-tsc --noEmit -p tsconfig.json",
+    "typecheck:server": "tsc -p tsconfig.server.json --noEmit",
+    "typecheck": "npm run typecheck:web && npm run typecheck:server",
+    "lint": "eslint .",
+    "check:secrets": "node scripts/check-tracked-secrets.mjs",
+    "check": "npm run typecheck && npm run lint && npm run check:secrets",
+    "build": "npm run check && vite build && tsc -p tsconfig.server.json",
     "prestart": "npm run build",
-    "start": "tsx dist-server/index.js"
+    "start": "tsx dist-server/server/index.js",
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",
@@ -26,7 +33,14 @@
     "vue": "^3.5.34"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/express": "^5.0.6",
-    "@types/node": "^25.9.1"
+    "@types/node": "^25.9.1",
+    "eslint": "^10.5.0",
+    "eslint-plugin-vue": "^10.9.2",
+    "globals": "^17.7.0",
+    "typescript-eslint": "^8.62.0",
+    "vitest": "^4.1.9",
+    "vue-tsc": "^3.3.5"
   }
 }

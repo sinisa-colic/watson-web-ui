@@ -18,8 +18,13 @@ function buildFramesPath(reportDateRange: ReportDateRange): string {
   return `/api/frames?range=week&from=${from}&to=${to}`;
 }
 
+function excludedWatsonTags(clients: ClientOption[]): Set<string> {
+  return new Set(clients.filter((client) => client.watsonTracking === false).map((client) => client.tag));
+}
+
 export function buildReport(frames: WatsonFrame[], clients: ClientOption[]): SourceReport {
   const clientByTag = new Map(clients.map((client) => [client.tag, client.label]));
+  const skipTags = excludedWatsonTags(clients);
   const byClientTotals = new Map<string, number>();
   const byProjectTotals = new Map<string, number>();
   const dayMap = new Map<
@@ -27,7 +32,9 @@ export function buildReport(frames: WatsonFrame[], clients: ClientOption[]): Sou
     { totalMs: number; byClient: Map<string, number>; byProject: Map<string, number> }
   >();
 
-  for (const frame of frames) {
+  const trackedFrames = frames.filter((frame) => !frame.tags.some((tag) => skipTags.has(tag)));
+
+  for (const frame of trackedFrames) {
     const duration = frameDuration(frame);
     byProjectTotals.set(frame.project, (byProjectTotals.get(frame.project) ?? 0) + duration);
 
@@ -62,7 +69,7 @@ export function buildReport(frames: WatsonFrame[], clients: ClientOption[]): Sou
   return {
     id: watsonDefinition.id,
     label: watsonDefinition.label,
-    totalMs: frames.reduce((sum, frame) => sum + frameDuration(frame), 0),
+    totalMs: trackedFrames.reduce((sum, frame) => sum + frameDuration(frame), 0),
     byClient: sortedTotals(byClientTotals),
     byProject: sortedTotals(byProjectTotals),
     daily,

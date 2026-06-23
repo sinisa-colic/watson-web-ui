@@ -7,10 +7,9 @@ import path from "node:path";
 import express from "express";
 import {
   getConfiguredClients,
-  getDefaultClientKey,
-  jiraEnabledClientCount
+  getDefaultClientKey
 } from "./clientConfig.js";
-import { fetchIssueMap, fetchMyIssues, jiraStatusForClient } from "./jira.js";
+import { getIntegrationEnabledCounts, mountIntegrationRoutes } from "../integrations/server-manifest.js";
 import { loadWatsonCliConfig } from "./watsonConfig.js";
 
 type WatsonFrame = {
@@ -177,7 +176,7 @@ async function assertWatsonAvailable() {
     output = await runWatson(["--version"]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Watson CLI is required but could not be run: ${message}`);
+    throw new Error(`Watson CLI is required but could not be run: ${message}`, { cause: error });
   }
 
   const version = output.match(/version\s+(\d+\.\d+\.\d+)/i)?.[1];
@@ -387,20 +386,20 @@ function readClientQuery(request: express.Request): string | undefined {
 
 app.get("/api/options", async (_request, response, next) => {
   try {
-    const [projects, tags, config, clients, defaultClientKey, jiraClients] = await Promise.all([
+    const [projects, tags, config, clients, defaultClientKey, integrationCounts] = await Promise.all([
       listWatsonValues("projects"),
       listWatsonValues("tags"),
       loadWatsonCliConfig(readWatsonConfigValue),
       getConfiguredClients(),
       getDefaultClientKey(),
-      jiraEnabledClientCount()
+      getIntegrationEnabledCounts()
     ]);
     response.json({
       projects,
       tags,
       clients,
       defaultClientKey,
-      jiraEnabledClientCount: jiraClients,
+      ...integrationCounts,
       ...config
     });
   } catch (error) {
@@ -408,49 +407,7 @@ app.get("/api/options", async (_request, response, next) => {
   }
 });
 
-app.get("/api/jira/status", async (request, response, next) => {
-  try {
-    response.json(await jiraStatusForClient(readClientQuery(request)));
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get("/api/jira/issues", async (request, response, next) => {
-  try {
-    const clientKey = readClientQuery(request);
-    const status = await jiraStatusForClient(clientKey);
-    if (!status.configured) {
-      response.json({ configured: false, issues: [] });
-      return;
-    }
-
-    response.json({ configured: true, issues: await fetchMyIssues(clientKey) });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get("/api/jira/issue-map", async (request, response, next) => {
-  try {
-    const clientKey = readClientQuery(request);
-    const status = await jiraStatusForClient(clientKey);
-    if (!status.configured) {
-      response.json({});
-      return;
-    }
-
-    const keysParam = typeof request.query.keys === "string" ? request.query.keys : "";
-    const keys = keysParam
-      .split(",")
-      .map((key) => key.trim())
-      .filter(Boolean);
-
-    response.json(await fetchIssueMap(keys, clientKey));
-  } catch (error) {
-    next(error);
-  }
-});
+mountIntegrationRoutes(app, readClientQuery);
 
 app.post("/api/start", async (request, response, next) => {
   try {

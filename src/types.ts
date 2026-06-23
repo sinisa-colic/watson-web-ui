@@ -1,3 +1,7 @@
+import type { ProjectTotal } from "#integrations/types";
+
+export type { ProjectTotal };
+
 export type WatsonFrame = {
   id: string;
   project: string;
@@ -12,11 +16,6 @@ export type WatsonStatus = {
   tags: string[];
   elapsed: string | null;
   startedAt: string | null;
-};
-
-export type ProjectTotal = {
-  name: string;
-  duration: number;
 };
 
 export type DaySummary = {
@@ -37,8 +36,9 @@ export type ClientOption = {
   key: string;
   label: string;
   tag: string;
-  jiraConfigured: boolean;
+  integrations: Record<string, boolean>;
   configured: boolean;
+  watsonTracking?: boolean;
 };
 
 export type WatsonOptions = {
@@ -46,16 +46,9 @@ export type WatsonOptions = {
   tags: string[];
   clients: ClientOption[];
   defaultClientKey: string | null;
-  jiraEnabledClientCount: number;
+  integrationEnabledCounts: Record<string, number>;
   stopOnStart: boolean;
   dateFormat: string;
   timeFormat: string;
   weekStart: string;
-};
-
-export type JiraIssue = {
-  key: string;
-  summary: string;
-  status: string;
-  url: string;
 };

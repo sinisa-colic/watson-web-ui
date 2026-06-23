@@ -23,6 +23,7 @@ function parseProjectIds(raw: string): number[] | undefined {
 
 type EnvPrefixOptions = {
   fallbackToGlobal?: boolean;
+  taskProjectIds?: number[];
 };
 
 export function jiraFromEnv(prefix: string, options: EnvPrefixOptions = {}): ClientJiraConfig | undefined {
@@ -43,12 +44,14 @@ export function hubstaffFromEnv(
 ): ClientHubstaffConfig | undefined {
   const global = options.fallbackToGlobal ? legacyGlobalHubstaffConfig() : undefined;
   const envProjectIds = parseProjectIds(env(`${prefix}_HUBSTAFF_PROJECT_IDS`, ""));
+  const envTaskProjectIds = parseProjectIds(env(`${prefix}_HUBSTAFF_TASK_PROJECT_IDS`, ""));
 
   return normalizeHubstaffConfig({
     refreshToken: env(`${prefix}_HUBSTAFF_REFRESH_TOKEN`, global?.refreshToken ?? ""),
     organizationId: Number(
       env(`${prefix}_HUBSTAFF_ORGANIZATION_ID`, global ? String(global.organizationId) : "0")
     ),
-    projectIds: projectIds ?? envProjectIds ?? global?.projectIds
+    projectIds: projectIds ?? envProjectIds ?? global?.projectIds,
+    taskProjectIds: options.taskProjectIds ?? envTaskProjectIds
   });
 }

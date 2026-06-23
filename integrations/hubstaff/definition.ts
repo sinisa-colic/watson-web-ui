@@ -4,6 +4,8 @@ export type ClientHubstaffConfig = {
   refreshToken: string;
   organizationId: number;
   projectIds?: number[];
+  /** Hubstaff projects whose tasks appear in the timer picker (defaults to projectIds). */
+  taskProjectIds?: number[];
 };
 
 export type ResolvedHubstaffConfig = ClientHubstaffConfig & {
@@ -59,6 +61,7 @@ export function normalizeHubstaffConfig(hubstaff: ClientHubstaffConfig | undefin
   const refreshToken = hubstaff.refreshToken.trim();
   const organizationId = Number(hubstaff.organizationId);
   const projectIds = parseProjectIds(hubstaff.projectIds);
+  const taskProjectIds = parseProjectIds(hubstaff.taskProjectIds);
 
   const values = [refreshToken, Number.isFinite(organizationId) && organizationId > 0 ? String(organizationId) : ""];
   const filled = values.filter(Boolean).length;
@@ -74,7 +77,8 @@ export function normalizeHubstaffConfig(hubstaff: ClientHubstaffConfig | undefin
   return {
     refreshToken,
     organizationId,
-    projectIds
+    projectIds,
+    taskProjectIds
   };
 }
 

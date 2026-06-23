@@ -71,6 +71,7 @@ onUnmounted(() => {
     </p>
 
     <CurrentTimerCard
+      v-if="dashboard.watsonTimerEnabled.value || dashboard.status.value?.running"
       :status="dashboard.status.value"
       :current-project-display="dashboard.currentProjectDisplay.value"
       :current-elapsed-ms="dashboard.currentElapsedMs.value"
@@ -91,6 +92,7 @@ onUnmounted(() => {
       :show-custom-tags="dashboard.showCustomTags.value"
       :primary-action-label="dashboard.primaryActionLabel.value"
       :can-start="dashboard.canStart.value"
+      :watson-timer-enabled="dashboard.watsonTimerEnabled.value"
       :status="dashboard.status.value"
       @project-focus="dashboard.markProjectTouched"
       @project-change="dashboard.onProjectSelectionChange"
@@ -103,10 +105,15 @@ onUnmounted(() => {
     />
 
     <StickyTimerBar
-      v-if="dashboard.status.value?.running && dashboard.status.value.project"
+      v-if="
+        (dashboard.watsonTimerEnabled.value || dashboard.status.value?.running) &&
+        dashboard.status.value?.running &&
+        dashboard.status.value.project
+      "
       :status="dashboard.status.value"
       :project-name="dashboard.status.value.project"
       :current-elapsed-ms="dashboard.currentElapsedMs.value"
+      :issue-for-project="dashboard.issueForProject"
       @stop="dashboard.stop"
     />
 
@@ -115,7 +122,7 @@ onUnmounted(() => {
     <template v-else>
       <RangeCard
         v-model:range="dashboard.range.value"
-        :total-ms="dashboard.totalMs.value"
+        :time-tracker-reports="dashboard.sourceReports.value"
         :selected-range-label="dashboard.selectedRangeLabel.value"
         @range-change="dashboard.refresh"
         @move-week="dashboard.moveWeek"
@@ -125,15 +132,14 @@ onUnmounted(() => {
       />
 
       <DailyReport
-        :daily-summaries="dashboard.dailySummaries.value"
-        :max-daily-ms="dashboard.maxDailyMs.value"
-        :project-label="dashboard.projectLabel"
+        :unified-daily-summaries="dashboard.unifiedDailySummaries.value"
+        :max-daily-ms="dashboard.maxUnifiedDailyMs.value"
+        :issue-for-project="dashboard.issueForProject"
       />
 
       <section class="columns">
         <ProjectTotals
-          :totals-by-project="dashboard.totalsByProject.value"
-          :totals-by-client="dashboard.totalsByClient.value"
+          :time-tracker-reports="dashboard.sourceReports.value"
           :issue-for-project="dashboard.issueForProject"
           :collapsed="projectTotalsCollapsed"
           @toggle="toggleProjectTotals"

@@ -2,6 +2,7 @@ import { computed, ref, type ComputedRef, type Ref } from "vue";
 import type { ClientOption, WatsonFrame, WatsonOptions, WatsonStatus } from "../types";
 import { addDays, endOfMonth } from "../utils/time";
 import { buildReportDateRange } from "#integrations/hubstaff/client";
+import { ALL_CLIENTS_KEY } from "#integrations/client-selection";
 import { createHubstaffLoader, createJiraLoader, createWatsonLoader } from "#integrations/client-manifest";
 import type { PickerItem, SourceReport, UnifiedDaySummary } from "#integrations/types";
 import { mergeUnifiedDays } from "#integrations/unified-days";
@@ -41,15 +42,24 @@ export function useReportIntegrations(input: {
   });
 
   const hubstaff = createHubstaffLoader({
+    selectedClientKey: input.selectedClientKey,
+    selectedClient: input.selectedClient,
+    enabledCount: computed(() => enabledCounts.value["hubstaff"] ?? 0),
     clientOptions: input.clientOptions,
     reportDateRange
   });
 
-  const sourceReports = computed<SourceReport[]>(() => [
-    ...watson.sourceReports.value,
-    ...hubstaff.sourceReports.value,
-    ...jira.sourceReports.value
-  ]);
+  const sourceReports = computed<SourceReport[]>(() => {
+    const showWatson =
+      input.selectedClientKey.value === ALL_CLIENTS_KEY ||
+      input.selectedClient.value?.watsonTracking !== false;
+
+    return [
+      ...(showWatson ? watson.sourceReports.value : []),
+      ...hubstaff.sourceReports.value,
+      ...jira.sourceReports.value
+    ];
+  });
 
   const unifiedDailySummaries = computed<UnifiedDaySummary[]>(() =>
     mergeUnifiedDays(sourceReports.value)
@@ -85,6 +95,13 @@ export function useReportIntegrations(input: {
   }
 
   function localFrames(): WatsonFrame[] {
+    if (
+      input.selectedClientKey.value !== ALL_CLIENTS_KEY &&
+      input.selectedClient.value?.watsonTracking === false
+    ) {
+      return [];
+    }
+
     return watson.frames.value;
   }
 

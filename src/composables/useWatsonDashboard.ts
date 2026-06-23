@@ -1,8 +1,15 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import type { ClientOption, DaySummary, JiraIssue, LogDay, ProjectTotal, WatsonFrame, WatsonOptions, WatsonStatus } from "../types";
+import type {
+  ClientOption,
+  LogDay,
+  WatsonFrame,
+  WatsonOptions,
+  WatsonStatus
+} from "../types";
+import { ALL_CLIENTS_KEY } from "#integrations/client-selection";
+import { useReportIntegrations } from "./useReportIntegrations";
 import { api } from "../utils/api";
 import { applyWatsonDisplayPreferences } from "../utils/displayPreferences";
-import { parseIssueKey } from "../utils/jira";
 import {
   isOfflineApiError,
   queueOfflineAction,
@@ -13,7 +20,6 @@ import {
 import {
   addDays,
   addMonths,
-  endOfMonth,
   formatDay,
   formatDuration,
   formatMonth,
@@ -21,16 +27,14 @@ import {
   formatTime,
   frameDuration,
   startOfWeek,
-  toLocalDate,
   toDatetimeLocalValue,
   datetimeLocalToIso
 } from "../utils/time";
 
-const ISSUE_KEY_PATTERN = /^[A-Z][A-Z0-9]+-\d+$/i;
 const RUNNING_STATUS_STORAGE_KEY = "watson-web-ui-running-status";
 export const CUSTOM_PROJECT_OPTION = "__custom_project__";
 export const CUSTOM_TAG_OPTION = "__custom_tags__";
-export const ALL_CLIENTS_KEY = "__all__";
+export { ALL_CLIENTS_KEY };
 
 export type EditFrameDraft = {
   project: string;
@@ -48,17 +52,11 @@ export function useWatsonDashboard() {
   const range = ref("week");
   const weekStart = ref(startOfWeek(new Date()));
   const monthStart = ref(addMonths(new Date(), 0));
-  const frames = ref<WatsonFrame[]>([]);
-  const allFrames = ref<WatsonFrame[]>([]);
   const status = ref<WatsonStatus | null>(null);
   const projectOptions = ref<string[]>([]);
   const tagOptions = ref<string[]>([]);
-  const jiraIssues = ref<JiraIssue[]>([]);
-  const issueMap = ref<Record<string, JiraIssue>>({});
-  const jiraConfigured = ref(false);
   const configuredClients = ref<ClientOption[]>([]);
   const defaultClientKey = ref<string | null>(null);
-  const jiraEnabledClientCount = ref(0);
   const selectedClientKey = ref(ALL_CLIENTS_KEY);
   const clientTouched = ref(false);
   const stopOnStart = ref(false);
@@ -87,94 +85,7 @@ export function useWatsonDashboard() {
   let offlineSyncInterval: number | undefined;
   const OFFLINE_SYNC_INTERVAL_MS = 60_000;
 
-  const totalMs = computed(() =>
-    frames.value.reduce((sum, frame) => sum + (new Date(frame.stop).getTime() - new Date(frame.start).getTime()), 0)
-  );
-
-  const totalsByProject = computed<ProjectTotal[]>(() => {
-    const totals = new Map<string, number>();
-
-    for (const frame of frames.value) {
-      totals.set(frame.project, (totals.get(frame.project) ?? 0) + frameDuration(frame));
-    }
-
-    return Array.from(totals.entries())
-      .map(([name, duration]) => ({ name, duration }))
-      .sort((a, b) => b.duration - a.duration);
-  });
-
-  const totalsByClient = computed<ProjectTotal[]>(() => {
-    const clientByTag = new Map(configuredClients.value.map((client) => [client.tag, client.label]));
-    const totals = new Map<string, number>();
-
-    for (const frame of frames.value) {
-      const clientTag = frame.tags.find((tag) => clientByTag.has(tag));
-      if (!clientTag) {
-        continue;
-      }
-
-      const clientLabel = clientByTag.get(clientTag) ?? clientTag;
-      totals.set(clientLabel, (totals.get(clientLabel) ?? 0) + frameDuration(frame));
-    }
-
-    return Array.from(totals.entries())
-      .map(([name, duration]) => ({ name, duration }))
-      .sort((a, b) => b.duration - a.duration);
-  });
-
-  const dailySummaries = computed<DaySummary[]>(() => {
-    const days = new Map<string, { date: Date; duration: number; projects: Map<string, number> }>();
-
-    for (const frame of frames.value) {
-      const start = new Date(frame.start);
-      const key = start.toLocaleDateString("en-CA");
-      const duration = frameDuration(frame);
-      const day = days.get(key) ?? { date: start, duration: 0, projects: new Map<string, number>() };
-
-      day.duration += duration;
-      day.projects.set(frame.project, (day.projects.get(frame.project) ?? 0) + duration);
-      days.set(key, day);
-    }
-
-    return Array.from(days.entries())
-      .map(([key, day]) => ({
-        key,
-        label: formatDay(day.date),
-        duration: day.duration,
-        projects: Array.from(day.projects.entries())
-          .map(([name, duration]) => ({ name, duration }))
-          .sort((a, b) => b.duration - a.duration)
-      }))
-      .sort((a, b) => a.key.localeCompare(b.key));
-  });
-
-  const maxDailyMs = computed(() => Math.max(...dailySummaries.value.map((day) => day.duration), 1));
-
-  const logDays = computed<LogDay[]>(() => {
-    const days = new Map<string, { date: Date; duration: number; frames: WatsonFrame[] }>();
-
-    for (const frame of frames.value) {
-      const start = new Date(frame.start);
-      const key = start.toLocaleDateString("en-CA");
-      const day = days.get(key) ?? { date: start, duration: 0, frames: [] };
-
-      day.duration += frameDuration(frame);
-      day.frames.push(frame);
-      days.set(key, day);
-    }
-
-    return Array.from(days.entries())
-      .map(([key, day]) => ({
-        key,
-        label: formatDay(day.date),
-        duration: day.duration,
-        frames: day.frames.sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())
-      }))
-      .sort((a, b) => b.key.localeCompare(a.key));
-  });
-
   const weekEnd = computed(() => addDays(weekStart.value, 6));
-  const monthEnd = computed(() => endOfMonth(monthStart.value));
 
   const selectedRangeLabel = computed(() => {
     if (range.value === "week") {
@@ -206,7 +117,7 @@ export function useWatsonDashboard() {
     }
     return "Start";
   });
-  const canStart = computed(() => !status.value?.running || stopOnStart.value);
+
   const editOpen = computed(() => editingFrame.value !== null);
   const canSaveEdit = computed(() => {
     const draft = editDraft.value;
@@ -226,7 +137,7 @@ export function useWatsonDashboard() {
         key: tag,
         label: tag,
         tag,
-        jiraConfigured: false,
+        integrations: {},
         configured: false
       }));
 
@@ -239,6 +150,53 @@ export function useWatsonDashboard() {
     }
 
     return clientOptions.value.find((client) => client.key === selectedClientKey.value) ?? null;
+  });
+
+  const watsonTimerEnabled = computed(
+    () =>
+      selectedClientKey.value === ALL_CLIENTS_KEY || selectedClient.value?.watsonTracking !== false
+  );
+
+  const canStart = computed(
+    () => watsonTimerEnabled.value && (!status.value?.running || stopOnStart.value)
+  );
+
+  const reportIntegrations = useReportIntegrations({
+    range,
+    weekStart,
+    monthStart,
+    selectedClientKey,
+    selectedClient,
+    clientOptions
+  });
+
+  const frames = computed(() => reportIntegrations.localFrames());
+  const allFrames = reportIntegrations.localAllFrames;
+  const sourceReports = reportIntegrations.sourceReports;
+  const unifiedDailySummaries = reportIntegrations.unifiedDailySummaries;
+  const maxUnifiedDailyMs = reportIntegrations.maxUnifiedDailyMs;
+
+  const logDays = computed<LogDay[]>(() => {
+    const days = new Map<string, { date: Date; duration: number; frames: WatsonFrame[] }>();
+
+    for (const frame of frames.value) {
+      const start = new Date(frame.start);
+      const key = start.toLocaleDateString("en-CA");
+      const day = days.get(key) ?? { date: start, duration: 0, frames: [] };
+
+      day.duration += frameDuration(frame);
+      day.frames.push(frame);
+      days.set(key, day);
+    }
+
+    return Array.from(days.entries())
+      .map(([key, day]) => ({
+        key,
+        label: formatDay(day.date),
+        duration: day.duration,
+        frames: day.frames.sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())
+      }))
+      .sort((a, b) => b.key.localeCompare(a.key));
   });
 
   const selectedClientTag = computed(() => selectedClient.value?.tag ?? null);
@@ -270,27 +228,17 @@ export function useWatsonDashboard() {
     return projectsByClientTag.value.get(tag) ?? new Set<string>();
   });
 
-  const showJiraIssues = computed(() => {
-    if (selectedClientKey.value === ALL_CLIENTS_KEY) {
-      return jiraEnabledClientCount.value <= 1 && jiraConfigured.value;
-    }
-
-    return Boolean(selectedClient.value?.jiraConfigured && jiraConfigured.value);
-  });
-
   const projectPickerOptions = computed(() => {
     const seen = new Set<string>();
     const options: Array<{ key: string; label: string; subtitle?: string }> = [];
 
-    if (showJiraIssues.value) {
-      for (const issue of jiraIssues.value) {
-        const key = issue.key.toUpperCase();
-        if (seen.has(key)) {
-          continue;
-        }
-        seen.add(key);
-        options.push({ key: issue.key, label: issue.key, subtitle: issue.summary });
+    for (const issue of reportIntegrations.allIssues.value) {
+      const key = issue.key.toUpperCase();
+      if (seen.has(key)) {
+        continue;
       }
+      seen.add(key);
+      options.push({ key: issue.key, label: issue.key, subtitle: issue.summary });
     }
 
     const candidateProjects = [
@@ -314,7 +262,7 @@ export function useWatsonDashboard() {
         continue;
       }
       seen.add(key);
-      const issue = issueForProject(name);
+      const issue = reportIntegrations.issueForProject(name);
       options.push({
         key: name,
         label: name,
@@ -327,22 +275,8 @@ export function useWatsonDashboard() {
 
   watch(projectPickerOptions, syncProjectSelection);
 
-  function looksLikeIssueKey(value: string) {
-    return Boolean(parseIssueKey(value) || ISSUE_KEY_PATTERN.test(value.trim()));
-  }
-
-  function issueForProject(name: string): JiraIssue | null {
-    return issueMap.value[name.toUpperCase()] ?? null;
-  }
-
-  function projectLabel(name: string) {
-    const issue = issueForProject(name);
-    return issue ? `${name} - ${issue.summary}` : name;
-  }
-
-  function collectIssueKeys(...sources: Array<string | null | undefined>) {
-    return [...new Set(sources.filter((value): value is string => Boolean(value)).filter(looksLikeIssueKey))];
-  }
+  const issueForProject = reportIntegrations.issueForProject;
+  const projectLabel = reportIntegrations.projectLabel;
 
   function updateOfflineQueueCount() {
     offlineQueueCount.value = queuedOfflineActions().length;
@@ -528,71 +462,6 @@ export function useWatsonDashboard() {
     await refresh();
   }
 
-  function jiraQuery(extra: Record<string, string> = {}) {
-    const params = new URLSearchParams(extra);
-    if (selectedClientKey.value !== ALL_CLIENTS_KEY) {
-      params.set("client", selectedClientKey.value);
-    }
-
-    const query = params.toString();
-    return query ? `?${query}` : "";
-  }
-
-  async function loadJiraData(nextStatus: WatsonStatus, nextFrames: WatsonFrame[], nextProjects: string[]) {
-    if (selectedClientKey.value !== ALL_CLIENTS_KEY && !selectedClient.value?.jiraConfigured) {
-      jiraConfigured.value = false;
-      jiraIssues.value = [];
-      issueMap.value = {};
-      return;
-    }
-
-    const keys = collectIssueKeys(
-      nextStatus.project ?? undefined,
-      ...nextFrames.map((frame) => frame.project),
-      ...nextProjects
-    );
-    const shouldFetchIssueMap =
-      keys.length > 0 &&
-      (selectedClientKey.value !== ALL_CLIENTS_KEY || jiraEnabledClientCount.value <= 1);
-
-    const [statusResponse, issuesResponse, mapResponse] = await Promise.all([
-      api<{ configured: boolean }>(`/api/jira/status${jiraQuery()}`).catch(() => ({ configured: false })),
-      showJiraIssues.value
-        ? api<{ configured: boolean; issues: JiraIssue[] }>(`/api/jira/issues${jiraQuery()}`).catch(() => ({
-            configured: false,
-            issues: []
-          }))
-        : Promise.resolve({ configured: false, issues: [] }),
-      shouldFetchIssueMap
-        ? api<Record<string, JiraIssue>>(`/api/jira/issue-map${jiraQuery({ keys: keys.join(",") })}`).catch(() => ({}))
-        : Promise.resolve({})
-    ]);
-
-    jiraConfigured.value = statusResponse.configured;
-    jiraIssues.value = issuesResponse.issues ?? [];
-    issueMap.value = mapResponse;
-  }
-
-  async function loadMissingIssueMap(...sources: Array<string | null | undefined>) {
-    if (selectedClientKey.value === ALL_CLIENTS_KEY && jiraEnabledClientCount.value > 1) {
-      return;
-    }
-
-    if (!jiraConfigured.value) {
-      return;
-    }
-
-    const keys = collectIssueKeys(...sources).filter((key) => !issueMap.value[key.toUpperCase()]);
-    if (!keys.length) {
-      return;
-    }
-
-    const nextIssues = await api<Record<string, JiraIssue>>(
-      `/api/jira/issue-map${jiraQuery({ keys: keys.join(",") })}`
-    ).catch(() => ({}));
-    issueMap.value = { ...issueMap.value, ...nextIssues };
-  }
-
   function preselectClient(nextOptions: WatsonOptions) {
     if (clientTouched.value) {
       return;
@@ -600,7 +469,7 @@ export function useWatsonDashboard() {
 
     configuredClients.value = nextOptions.clients ?? [];
     defaultClientKey.value = nextOptions.defaultClientKey ?? null;
-    jiraEnabledClientCount.value = nextOptions.jiraEnabledClientCount ?? 0;
+    reportIntegrations.applyOptions(nextOptions);
 
     if (defaultClientKey.value && clientOptions.value.some((client) => client.key === defaultClientKey.value)) {
       selectedClientKey.value = defaultClientKey.value;
@@ -618,29 +487,17 @@ export function useWatsonDashboard() {
   async function onClientSelectionChange() {
     clientTouched.value = true;
     projectTouched.value = false;
-    jiraConfigured.value = false;
-    jiraIssues.value = [];
-    issueMap.value = {};
 
-    await loadJiraData(status.value ?? { running: false, project: null, tags: [], elapsed: null, startedAt: null }, frames.value, projectOptions.value);
+    await reportIntegrations.resetOnClientChange(
+      status.value ?? { running: false, project: null, tags: [], elapsed: null, startedAt: null },
+      projectOptions.value
+    );
 
     const activeProject = status.value?.running ? status.value.project : null;
     const nextProject = activeProject ?? projectPickerOptions.value[0]?.key ?? "";
 
     project.value = nextProject;
     selectedProject.value = nextProject || CUSTOM_PROJECT_OPTION;
-  }
-
-  function framesPath() {
-    if (range.value === "month") {
-      return `/api/frames?range=month&from=${toLocalDate(monthStart.value)}&to=${toLocalDate(monthEnd.value)}`;
-    }
-
-    if (range.value !== "week") {
-      return `/api/frames?range=${range.value}`;
-    }
-
-    return `/api/frames?range=week&from=${toLocalDate(weekStart.value)}&to=${toLocalDate(weekEnd.value)}`;
   }
 
   async function refresh(options: { showLoading?: boolean; skipOfflineSync?: boolean } = {}) {
@@ -654,17 +511,13 @@ export function useWatsonDashboard() {
     try {
       const hasPendingOffline = queuedOfflineActions().length > 0;
       const statusPath = hasPendingOffline ? `/api/status?_=${Date.now()}` : "/api/status";
-      const [nextStatus, nextFrames, nextAllFrames, nextOptions] = await Promise.all([
+      const [nextStatus, nextOptions] = await Promise.all([
         api<WatsonStatus>(statusPath),
-        api<WatsonFrame[]>(framesPath()),
-        api<WatsonFrame[]>("/api/frames?range=all"),
         api<WatsonOptions>("/api/options")
       ]);
 
       status.value = resolveStatusFromRefresh(nextStatus);
       rememberRunningStatus(status.value);
-      frames.value = nextFrames;
-      allFrames.value = nextAllFrames;
       projectOptions.value = nextOptions.projects;
       tagOptions.value = nextOptions.tags;
       stopOnStart.value = nextOptions.stopOnStart;
@@ -673,8 +526,8 @@ export function useWatsonDashboard() {
         timeFormat: nextOptions.timeFormat,
         weekStart: nextOptions.weekStart
       });
-      preselectProject(nextStatus, nextFrames);
-      await loadJiraData(nextStatus, nextFrames, nextOptions.projects);
+      await reportIntegrations.loadForReport(nextStatus, nextOptions.projects);
+      preselectProject(nextStatus, frames.value);
       syncProjectSelection();
       updateOfflineQueueCount();
       if (!options.skipOfflineSync) {
@@ -695,17 +548,19 @@ export function useWatsonDashboard() {
   }
 
   async function refreshFramesOnly(nextStatus: WatsonStatus) {
-    const [nextFrames, nextAllFrames] = await Promise.all([
-      api<WatsonFrame[]>(framesPath()),
-      api<WatsonFrame[]>("/api/frames?range=all")
-    ]);
-    frames.value = nextFrames;
-    allFrames.value = nextAllFrames;
-    await loadMissingIssueMap(nextStatus.project, ...nextFrames.map((frame) => frame.project));
+    await reportIntegrations.reloadLocalFrames();
+    await reportIntegrations.loadMissingEnrichment(
+      nextStatus.project,
+      ...frames.value.map((frame) => frame.project)
+    );
     lastRefreshedAt.value = new Date();
   }
 
   async function start() {
+    if (!watsonTimerEnabled.value) {
+      return;
+    }
+
     const wasRunning = Boolean(status.value?.running);
     const path = wasRunning && !stopOnStart.value ? "/api/switch" : "/api/start";
     const startedAt = new Date().toISOString();
@@ -726,7 +581,11 @@ export function useWatsonDashboard() {
         throw nextError;
       }
 
-      queueOfflineAction({ type: offlineActionType, project: nextProject, tags: nextTags, at: startedAt });
+      if (offlineActionType === "switch") {
+        queueOfflineAction({ type: "switch", project: nextProject, tags: nextTags, at: startedAt });
+      } else {
+        queueOfflineAction({ type: "start", project: nextProject, tags: nextTags, at: startedAt });
+      }
       updateOfflineQueueCount();
       applyOfflineQueueStatus();
       offlineMessage.value =
@@ -893,7 +752,9 @@ export function useWatsonDashboard() {
     selectedClientKey,
     clientOptions,
     selectedClient,
-    showJiraIssues,
+    sourceReports,
+    unifiedDailySummaries,
+    maxUnifiedDailyMs,
     selectedProject,
     customProjectInput,
     selectedTags,
@@ -909,17 +770,13 @@ export function useWatsonDashboard() {
     offlineMessage,
     lastRefreshedAt,
     canStart,
+    watsonTimerEnabled,
     editOpen,
     editDraft,
     editSaving,
     editError,
     canSaveEdit,
     stopOnStart,
-    totalMs,
-    totalsByProject,
-    totalsByClient,
-    dailySummaries,
-    maxDailyMs,
     logDays,
     selectedRangeLabel,
     currentElapsedMs,

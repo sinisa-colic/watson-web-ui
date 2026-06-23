@@ -12,6 +12,7 @@ It gives you a phone-friendly dashboard for the active timer, daily reports, pro
 - Daily breakdowns, totals by project, and log entries
 - Permanent removal of saved Watson frames
 - Optional Jira Cloud issue summaries for project keys like `PI-491`
+- Optional Hubstaff tracked time in reports (per client, cached server-side)
 - Installable PWA with a service worker and manual update trigger from the version badge
 - Mobile layout with a safe-area-aware bottom stop bar
 
@@ -183,6 +184,48 @@ Check Jira status:
 ```bash
 curl http://127.0.0.1:3131/api/jira/status
 ```
+
+## Hubstaff Integration (optional)
+
+Hubstaff tracked time can appear alongside Watson totals in the range header, daily breakdown, and project totals. Credentials stay server-side in `.env` or `clients.config.ts`, matching the per-client Jira pattern.
+
+### 1. Create a read-only personal access token
+
+1. Sign in at [Hubstaff personal access tokens](https://developer.hubstaff.com/personal_access_tokens)
+2. Create a token with scope **`hubstaff:read`** only (no write scope needed)
+3. Copy the **refresh token** value Hubstaff shows you (not a short-lived access token)
+
+Use a PAT for the Hubstaff user whose time you want in reports. To read another member's time you need a manager/owner role in that organization.
+
+### 2. Configure `.env` or `clients.config.ts`
+
+Single-client setup in `.env`:
+
+```bash
+HUBSTAFF_REFRESH_TOKEN=your_personal_refresh_token
+HUBSTAFF_ORGANIZATION_ID=12345
+# Optional: only include specific Hubstaff projects
+# HUBSTAFF_PROJECT_IDS=111,222
+```
+
+Multi-client setup mirrors Jira — see `clients.config.example.ts` for `CLIENT_A_HUBSTAFF_*` fields.
+
+Find your organization id in the Hubstaff app URL (`/organizations/{id}/...`) or via `GET /v2/organizations`.
+
+### 3. Restart the app
+
+```bash
+npm run build
+npm start
+```
+
+Check Hubstaff status:
+
+```bash
+curl "http://127.0.0.1:3131/api/hubstaff/status"
+```
+
+Cached report data is reused for 15 minutes per date range. Hubstaff OAuth tokens are persisted in `.hubstaff-tokens/org-<id>-<hash>.json` (gitignored): clients sharing the same Hubstaff account reuse one token file; separate accounts get separate files. The access token is reused until it expires — `HUBSTAFF_REFRESH_TOKEN` (or per-client `<PREFIX>_HUBSTAFF_REFRESH_TOKEN`) is only the initial seed.
 
 ### Security notes
 

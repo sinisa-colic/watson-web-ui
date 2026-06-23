@@ -1,19 +1,24 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  buildClientIntegrationFlags,
+  normalizeClientIntegrations
+} from "../integrations/server-manifest.js";
 
-export type ClientJiraConfig = {
-  baseUrl: string;
-  email: string;
-  apiToken: string;
-  jql: string;
-};
+import type { ClientJiraConfig } from "../integrations/jira/definition.js";
+import type { ClientHubstaffConfig } from "../integrations/hubstaff/definition.js";
+
+export type { ClientJiraConfig, ClientHubstaffConfig };
 
 export type ClientConfig = {
   key: string;
   label: string;
   tag: string;
+  /** When false, time for this client is tracked outside Watson (e.g. Hubstaff only). Defaults to true. */
+  watsonTracking?: boolean;
   jira?: ClientJiraConfig;
+  hubstaff?: ClientHubstaffConfig;
 };
 
 export type WatsonLocalUiConfig = {
@@ -25,15 +30,10 @@ export type ClientOption = {
   key: string;
   label: string;
   tag: string;
-  jiraConfigured: boolean;
+  integrations: Record<string, boolean>;
   configured: boolean;
+  watsonTracking: boolean;
 };
-
-export type ResolvedJiraConfig = ClientJiraConfig & {
-  clientKey: string;
-};
-
-const DEFAULT_JQL = "assignee=currentUser() AND statusCategory != Done ORDER BY updated DESC";
 
 let loadedConfig: WatsonLocalUiConfig | null | undefined;
 let loadError: Error | null = null;
@@ -46,33 +46,18 @@ export function env(key: string, fallback = ""): string {
   return value.trim();
 }
 
-function normalizeJiraConfig(jira: ClientJiraConfig | undefined): ClientJiraConfig | undefined {
-  if (!jira) {
-    return undefined;
+/** Dotenv treats unquoted apostrophes as delimiters (Salon D'Art → Salon D). */
+export function envLabel(key: string, fallback: string): string {
+  const value = env(key, fallback);
+  if (value.includes("'") || !fallback.includes("'")) {
+    return value;
   }
 
-  const baseUrl = jira.baseUrl.trim();
-  const email = jira.email.trim();
-  const apiToken = jira.apiToken.trim();
-  const jql = jira.jql.trim() || DEFAULT_JQL;
-
-  const values = [baseUrl, email, apiToken];
-  const filled = values.filter(Boolean).length;
-
-  if (filled === 0) {
-    return undefined;
+  if (fallback.startsWith(value) && value.length < fallback.length) {
+    return fallback;
   }
 
-  if (filled !== 3) {
-    throw new Error("Jira config must include baseUrl, email, and apiToken together, or leave all empty.");
-  }
-
-  return {
-    baseUrl: baseUrl.replace(/\/$/, ""),
-    email,
-    apiToken,
-    jql
-  };
+  return value;
 }
 
 function validateConfig(raw: unknown): WatsonLocalUiConfig {
@@ -116,7 +101,8 @@ function validateConfig(raw: unknown): WatsonLocalUiConfig {
       key,
       label: label || key,
       tag,
-      jira: normalizeJiraConfig(entry.jira)
+      watsonTracking: entry.watsonTracking !== false,
+      ...normalizeClientIntegrations(entry)
     });
   }
 
@@ -167,23 +153,6 @@ export async function loadClientRegistry(): Promise<WatsonLocalUiConfig | null> 
   return null;
 }
 
-export function legacyGlobalJiraConfig(): ClientJiraConfig | undefined {
-  const baseUrl = env("JIRA_BASE_URL");
-  const email = env("JIRA_EMAIL");
-  const apiToken = env("JIRA_API_TOKEN");
-
-  if (!baseUrl || !email || !apiToken) {
-    return undefined;
-  }
-
-  return normalizeJiraConfig({
-    baseUrl,
-    email,
-    apiToken,
-    jql: env("JIRA_JQL", DEFAULT_JQL)
-  });
-}
-
 export async function getConfiguredClients(): Promise<ClientOption[]> {
   const registry = await loadClientRegistry();
   if (!registry) {
@@ -194,8 +163,9 @@ export async function getConfiguredClients(): Promise<ClientOption[]> {
     key: client.key,
     label: client.label,
     tag: client.tag,
-    jiraConfigured: Boolean(client.jira),
-    configured: true
+    configured: true,
+    watsonTracking: client.watsonTracking !== false,
+    ...buildClientIntegrationFlags(client)
   }));
 }
 
@@ -206,44 +176,6 @@ export async function getDefaultClientKey(): Promise<string | null> {
   }
 
   return registry.defaultClientKey ?? registry.clients[0]?.key ?? null;
-}
-
-export async function resolveJiraConfig(clientKey?: string | null): Promise<ResolvedJiraConfig | null> {
-  const registry = await loadClientRegistry();
-
-  if (registry) {
-    if (clientKey) {
-      const client = registry.clients.find((entry) => entry.key === clientKey);
-      if (client?.jira) {
-        return { ...client.jira, clientKey: client.key };
-      }
-      return null;
-    }
-
-    const jiraClients = registry.clients.filter((client) => client.jira);
-    if (jiraClients.length === 1) {
-      const client = jiraClients[0];
-      return { ...client.jira!, clientKey: client.key };
-    }
-
-    return null;
-  }
-
-  const legacy = legacyGlobalJiraConfig();
-  if (!legacy) {
-    return null;
-  }
-
-  return { ...legacy, clientKey: "legacy" };
-}
-
-export async function jiraEnabledClientCount(): Promise<number> {
-  const registry = await loadClientRegistry();
-  if (!registry) {
-    return legacyGlobalJiraConfig() ? 1 : 0;
-  }
-
-  return registry.clients.filter((client) => client.jira).length;
 }
 
 export async function getClientTag(clientKey: string | null): Promise<string | null> {

@@ -78,6 +78,11 @@ export default defineConfig(({ command, mode }) => {
       __API_PORT__: JSON.stringify(appPort)
     },
     plugins: [vue(), precacheManifestPlugin(outDir, packageJson.version)],
+    resolve: {
+      alias: {
+        "#integrations": path.resolve(process.cwd(), "integrations")
+      }
+    },
     server: {
       host: webHost,
       port: webPort,

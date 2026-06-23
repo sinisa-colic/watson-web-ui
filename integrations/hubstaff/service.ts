@@ -1,6 +1,7 @@
 import type { ClientConfig } from "../../server/clientConfig.js";
 import { resolveIntegrationConfig } from "../../server/client-resolution.js";
 import type { HubstaffDailyEntry, HubstaffProjectTotal, HubstaffTimeReport } from "./definition.js";
+import type { HubstaffTaskOption } from "../types.js";
 import {
   isHubstaffConfigured,
   type ClientHubstaffConfig,
@@ -42,6 +43,7 @@ type HubstaffRuntime = {
   token: HubstaffTokenState | null;
   userIdCache: CacheEntry<number> | null;
   projectsCache: CacheEntry<Map<number, string>> | null;
+  tasksCache: CacheEntry<HubstaffTaskOption[]> | null;
   reportCache: Map<string, CacheEntry<HubstaffTimeReport>>;
 };
 
@@ -82,6 +84,7 @@ function runtimeForConfig(resolved: ResolvedHubstaffConfig): HubstaffRuntime {
     token: hydrateHubstaffToken(credentialScope, resolved.clientKey),
     userIdCache: null,
     projectsCache: null,
+    tasksCache: null,
     reportCache: new Map()
   };
   runtimes.set(resolved.clientKey, runtime);
@@ -466,6 +469,110 @@ export async function fetchHubstaffReport(
   return fetchReportForRuntime(runtimeForConfig(resolved), from, to);
 }
 
+export type HubstaffProjectOption = {
+  projectId: number;
+  name: string;
+};
+
+export async function fetchHubstaffProjects(clientKey?: string | null): Promise<HubstaffProjectOption[]> {
+  const resolved = await resolveHubstaffConfig(clientKey);
+  if (!resolved) {
+    return [];
+  }
+
+  const runtime = runtimeForConfig(resolved);
+  const projectNames = await getProjectNames(runtime);
+  const projects: HubstaffProjectOption[] = [];
+
+  for (const [projectId, name] of projectNames) {
+    if (projectAllowed(runtime, projectId)) {
+      projects.push({ projectId, name });
+    }
+  }
+
+  return projects.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function taskProjectFilter(runtime: HubstaffRuntime): string | undefined {
+  const taskProjectIds = runtime.config.taskProjectIds?.length
+    ? runtime.config.taskProjectIds
+    : runtime.config.projectIds;
+
+  return taskProjectIds?.length ? taskProjectIds.join(",") : undefined;
+}
+
+function taskProjectAllowed(runtime: HubstaffRuntime, projectId: number | undefined): projectId is number {
+  if (!projectId) {
+    return false;
+  }
+
+  const taskProjectIds = runtime.config.taskProjectIds?.length
+    ? runtime.config.taskProjectIds
+    : runtime.config.projectIds;
+
+  if (!taskProjectIds?.length) {
+    return true;
+  }
+
+  return taskProjectIds.includes(projectId);
+}
+
+async function fetchHubstaffTasksForRuntime(runtime: HubstaffRuntime): Promise<HubstaffTaskOption[]> {
+  if (runtime.tasksCache && runtime.tasksCache.expiresAt > Date.now()) {
+    return runtime.tasksCache.value;
+  }
+
+  const userId = await getMyUserId(runtime);
+  const projectNames = await getProjectNames(runtime);
+  const tasks: HubstaffTaskOption[] = [];
+  let pageStartId: number | undefined;
+  const projectFilter = taskProjectFilter(runtime);
+
+  do {
+    const data = await hubstaffFetch<{
+      pagination?: { next_page_start_id?: number };
+      tasks?: Array<{ id?: number; summary?: string; project_id?: number }>;
+    }>(runtime, `/organizations/${runtime.config.organizationId}/tasks`, {
+      page_limit: PAGE_LIMIT,
+      page_start_id: pageStartId,
+      project_ids: projectFilter,
+      user_ids: userId,
+      status: "active"
+    });
+
+    for (const task of data.tasks ?? []) {
+      const projectId = task.project_id;
+      const summary = task.summary?.trim();
+      if (!task.id || !summary || !taskProjectAllowed(runtime, projectId)) {
+        continue;
+      }
+
+      tasks.push({
+        taskId: task.id,
+        projectId,
+        summary,
+        projectName: projectNames.get(projectId) ?? `Project ${projectId}`
+      });
+    }
+
+    pageStartId = data.pagination?.next_page_start_id;
+  } while (pageStartId);
+
+  const sorted = tasks.sort((left, right) => left.summary.localeCompare(right.summary));
+  runtime.tasksCache = { value: sorted, expiresAt: Date.now() + PROJECTS_CACHE_TTL_MS };
+  return sorted;
+}
+
+export async function fetchHubstaffTasks(clientKey?: string | null): Promise<HubstaffTaskOption[]> {
+  const resolved = await resolveHubstaffConfig(clientKey);
+  if (!resolved) {
+    return [];
+  }
+
+  return fetchHubstaffTasksForRuntime(runtimeForConfig(resolved));
+}
+
+export type { HubstaffTaskOption } from "../types.js";
 export type {
   HubstaffDailyEntry,
   HubstaffProjectTotal,

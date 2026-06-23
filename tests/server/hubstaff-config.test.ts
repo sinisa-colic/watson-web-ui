@@ -41,6 +41,22 @@ describe("normalizeHubstaffConfig", () => {
       })
     ).toThrow(/refreshToken and organizationId together/);
   });
+
+  it("preserves taskProjectIds separately from report projectIds", () => {
+    expect(
+      normalizeHubstaffConfig({
+        refreshToken: "refresh-token",
+        organizationId: 42,
+        projectIds: [2434922, 3888799],
+        taskProjectIds: [3888799]
+      })
+    ).toEqual({
+      refreshToken: "refresh-token",
+      organizationId: 42,
+      projectIds: [2434922, 3888799],
+      taskProjectIds: [3888799]
+    });
+  });
 });
 
 describe("isHubstaffConfigured", () => {

@@ -6,6 +6,7 @@ clients.config.ts
 clients.config.js
 clients.config.mjs
 .backups/
+.hubstaff-tokens/
 .DS_Store
 .idea/
 .cursor/

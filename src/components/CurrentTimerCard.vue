@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { JiraIssue, WatsonStatus } from "../types";
-import { parseIssueKey } from "../utils/jira";
+import type { WatsonStatus } from "../types";
+import type { PickerItem } from "#integrations/types";
 import { formatStopwatch } from "../utils/time";
 
 defineProps<{
   status: WatsonStatus | null;
   currentProjectDisplay: { name: string; tags: string[] };
   currentElapsedMs: number;
-  issueForProject: (name: string) => JiraIssue | null;
+  issueForProject: (name: string) => PickerItem | null;
 }>();
 </script>
 
@@ -17,8 +17,8 @@ defineProps<{
       <div class="current-card-top">
         <span class="label">Current</span>
         <div class="current-badges">
-          <span v-if="parseIssueKey(currentProjectDisplay.name)" class="issue-key-badge">
-            {{ parseIssueKey(currentProjectDisplay.name) }}
+          <span v-if="issueForProject(currentProjectDisplay.name)" class="issue-key-badge">
+            {{ currentProjectDisplay.name }}
           </span>
           <span
             v-if="issueForProject(currentProjectDisplay.name)?.status"

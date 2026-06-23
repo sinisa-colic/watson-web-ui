@@ -23,22 +23,22 @@ describe("mergeUnifiedDays", () => {
 
     const hubstaff: SourceReport = {
       id: "hubstaff:client-a",
-      label: "Hubstaff — Client A",
+      label: "Client A",
       totalMs: 1800000,
-      byClient: [{ name: "PI-492", duration: 1800000 }],
-      byProject: [],
+      byClient: [],
+      byProject: [{ name: "PI-492", duration: 1800000 }],
       daily: [
         {
           date: "2026-06-23",
           totalMs: 1800000,
-          byClient: [{ name: "PI-492", duration: 1800000 }],
-          byProject: []
+          byClient: [],
+          byProject: [{ name: "PI-492", duration: 1800000 }]
         },
         {
           date: "2026-06-24",
           totalMs: 900000,
-          byClient: [{ name: "PI-492", duration: 900000 }],
-          byProject: []
+          byClient: [],
+          byProject: [{ name: "PI-492", duration: 900000 }]
         }
       ]
     };
