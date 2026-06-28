@@ -116,12 +116,12 @@ function projectLabel(
 }
 
 .source-label {
-  color: #64708a;
+  color: var(--color-text-muted);
   font-weight: 800;
 }
 
 .breakdown-heading {
-  color: #64708a;
+  color: var(--color-text-muted);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -132,10 +132,10 @@ function projectLabel(
   display: inline-block;
   height: 100%;
   min-width: 2px;
-  background: #8ea0c6;
+  background: var(--color-chart-bar);
 }
 
 .day-source-segment:first-child {
-  background: #4f6fae;
+  background: var(--color-accent);
 }
 </style>

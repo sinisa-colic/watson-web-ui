@@ -80,8 +80,8 @@ defineProps<{
 }
 
 .idle-pill {
-  background: #eef2fb;
-  border: 1px solid #dbe4ff;
+  background: var(--color-accent-soft-bg);
+  border: 1px solid var(--color-accent-soft-border);
   border-radius: 999px;
   display: block;
   min-height: 1.55rem;
@@ -103,14 +103,14 @@ defineProps<{
 }
 
 .idle-title strong {
-  color: #172033;
+  color: var(--color-text);
   display: block;
   font-size: 1.45rem;
   line-height: 1.18;
 }
 
 .idle-title span {
-  color: #64708a;
+  color: var(--color-text-muted);
   font-size: 0.95rem;
   font-weight: 650;
 }

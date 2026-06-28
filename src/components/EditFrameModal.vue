@@ -142,7 +142,7 @@ const readonlyTags = computed(() =>
 <style scoped>
 .modal-root {
   align-items: center;
-  background: rgba(15, 23, 42, 0.42);
+  background: var(--color-modal-backdrop);
   display: flex;
   inset: 0;
   justify-content: center;
@@ -152,10 +152,10 @@ const readonlyTags = computed(() =>
 }
 
 .modal-card {
-  background: #fff;
-  border: 1px solid #dbe4ff;
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-accent-soft-border);
   border-radius: 24px;
-  box-shadow: 0 24px 80px rgba(28, 38, 69, 0.18);
+  box-shadow: 0 24px 80px var(--color-shadow-modal);
   max-height: calc(100vh - 2rem);
   max-width: 34rem;
   overflow: auto;
@@ -197,17 +197,17 @@ const readonlyTags = computed(() =>
 }
 
 .readonly-tags span {
-  background: #e9fbf5;
-  border: 1px solid #c9f0df;
+  background: var(--color-tag-readonly-bg);
+  border: 1px solid var(--color-tag-readonly-border);
   border-radius: 999px;
-  color: #117457;
+  color: var(--color-tag-readonly-text);
   font-size: 0.82rem;
   font-weight: 800;
   padding: 0.28rem 0.55rem;
 }
 
 .readonly-muted {
-  color: #64708a;
+  color: var(--color-text-muted);
   font-size: 0.92rem;
   margin: 0;
 }
@@ -219,8 +219,8 @@ const readonlyTags = computed(() =>
 }
 
 .duration-field {
-  background: #f7f9ff;
-  border: 1px solid #e4e8f2;
+  background: var(--color-duration-bg);
+  border: 1px solid var(--color-border);
   border-radius: 18px;
   padding: 0.85rem;
 }
@@ -232,12 +232,12 @@ const readonlyTags = computed(() =>
 }
 
 .duration-head strong {
-  color: #172033;
+  color: var(--color-text);
   font-size: 1.25rem;
 }
 
 .duration-range {
-  accent-color: #315efb;
+  accent-color: var(--color-accent);
   border: 0;
   padding: 0;
   width: 100%;
@@ -245,7 +245,7 @@ const readonlyTags = computed(() =>
 
 .duration-controls {
   align-items: end;
-  color: #64708a;
+  color: var(--color-text-muted);
   display: flex;
   font-size: 0.86rem;
   font-weight: 650;
@@ -264,7 +264,7 @@ const readonlyTags = computed(() =>
 }
 
 .field-label {
-  color: #64708a;
+  color: var(--color-text-muted);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -272,7 +272,7 @@ const readonlyTags = computed(() =>
 }
 
 .modal-error {
-  color: #c62828;
+  color: var(--color-modal-error);
   font-size: 0.92rem;
   font-weight: 600;
   margin: 0;

@@ -98,7 +98,7 @@ const mergedTotals = computed(() => mergeTrackerTotals(props.timeTrackerReports)
 }
 
 .tracker-label {
-  color: #64708a;
+  color: var(--color-text-muted);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.02em;

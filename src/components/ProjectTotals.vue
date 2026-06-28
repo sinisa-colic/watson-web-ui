@@ -81,12 +81,12 @@ const clientCountLabel = computed(() => {
 }
 
 .tracker-group + .tracker-group {
-  border-top: 1px solid #edf0f6;
+  border-top: 1px solid var(--color-border-subtle);
   padding-top: 1rem;
 }
 
 .empty-note {
-  color: #64708a;
+  color: var(--color-text-muted);
   font-size: 0.9rem;
   margin: 0;
 }
